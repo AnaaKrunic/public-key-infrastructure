@@ -1,11 +1,14 @@
 package com.ftn.siit.ib.public_key_infrastructure.services.user;
 
+import com.ftn.siit.ib.public_key_infrastructure.dtos.LoginDTO;
 import com.ftn.siit.ib.public_key_infrastructure.dtos.UserRegistrationDTO;
 import com.ftn.siit.ib.public_key_infrastructure.entities.Organization;
 import com.ftn.siit.ib.public_key_infrastructure.entities.User;
 import com.ftn.siit.ib.public_key_infrastructure.repositories.OrganizationRepository;
 import com.ftn.siit.ib.public_key_infrastructure.repositories.UserRepository;
+import com.ftn.siit.ib.public_key_infrastructure.security.JwtUtil;
 import com.ftn.siit.ib.public_key_infrastructure.services.EmailService;
+import com.ftn.siit.ib.public_key_infrastructure.services.MFAService;
 import com.ftn.siit.ib.public_key_infrastructure.services.PasswordValidator;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -20,16 +23,23 @@ public class UserService implements IUserService {
     private final OrganizationRepository organizationRepository;
     private final PasswordEncoder passwordEncoder;
     private final EmailService emailService;
+    private final MFAService mfaService;
+    private final JwtUtil jwtUtil;
 
     public UserService(UserRepository userRepository,
                        OrganizationRepository organizationRepository,
                        PasswordEncoder passwordEncoder,
-                       EmailService emailService) {
+                       EmailService emailService,
+                       MFAService mfaService,
+                       JwtUtil jwtUtil) {
         this.userRepository = userRepository;
         this.organizationRepository = organizationRepository;
         this.passwordEncoder = passwordEncoder;
         this.emailService = emailService;
+        this.mfaService = mfaService;
+        this.jwtUtil = jwtUtil;
     }
+
 
     @Override
     public void register(UserRegistrationDTO dto) {
@@ -83,4 +93,47 @@ public class UserService implements IUserService {
         userRepository.save(user);
         return true;
     }
+
+    @Override
+    public String login(LoginDTO dto) {
+        User user = userRepository.findByEmail(dto.getEmail())
+                .orElseThrow(() -> new RuntimeException("User not found."));
+
+        if (!user.isEnabled()) {
+            throw new RuntimeException("Account not activated. Check your email.");
+        }
+
+        if (!passwordEncoder.matches(dto.getPassword(), user.getPasswordHash())) {
+            throw new RuntimeException("Invalid credentials.");
+        }
+
+        if (user.isMfaEnabled()) {
+            if (dto.getMfaCode() == null || !mfaService.verifyCode(user.getMfaSecret(), dto.getMfaCode())) {
+                throw new RuntimeException("Invalid MFA code.");
+            }
+        }
+
+        return jwtUtil.generateToken(user.getEmail());
+    }
+
+
+    @Override
+    public void enableMfa(String email, String secret) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        user.setMfaSecret(secret);
+        user.setMfaEnabled(true);
+        userRepository.save(user);
+    }
+
+    @Override
+    public boolean verifyMfaCode(String email, String code) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        if (!user.isMfaEnabled()) return false;
+        return mfaService.verifyCode(user.getMfaSecret(), code);
+    }
+
 }

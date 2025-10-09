@@ -1,6 +1,6 @@
 package com.ftn.siit.ib.public_key_infrastructure.controllers;
 
-import com.ftn.siit.ib.public_key_infrastructure.dtos.UserRegistrationDTO;
+import com.ftn.siit.ib.public_key_infrastructure.dtos.*;
 import com.ftn.siit.ib.public_key_infrastructure.services.user.IUserService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -30,6 +30,16 @@ public class AuthController {
             return ResponseEntity.ok("Account activated successfully.");
         } else {
             return ResponseEntity.badRequest().body("Invalid or expired activation token.");
+        }
+    }
+
+    @PostMapping("/login")
+    public ResponseEntity<?> login(@RequestBody LoginDTO loginDTO) {
+        try {
+            String result = userService.login(loginDTO);
+            return ResponseEntity.ok(result);
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
 }

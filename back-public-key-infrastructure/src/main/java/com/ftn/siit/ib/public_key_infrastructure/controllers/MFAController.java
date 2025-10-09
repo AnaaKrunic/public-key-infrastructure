@@ -17,7 +17,7 @@ public class MFAController {
         this.mfaService = mfaService;
         this.userService = userService;
     }
-/*
+
     @PostMapping("/enable")
     public ResponseEntity<?> enableMfa(@RequestParam String email) {
         String secret = mfaService.generateSecretKey();
@@ -36,5 +36,4 @@ public class MFAController {
             return ResponseEntity.badRequest().body("Invalid MFA code.");
         }
     }
- */
 }
