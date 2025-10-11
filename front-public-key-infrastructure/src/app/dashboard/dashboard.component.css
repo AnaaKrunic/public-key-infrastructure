@@ -1,0 +1,412 @@
+.dashboard-container {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 20px;
+}
+
+.dashboard-card {
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+  padding: 40px;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.header {
+  text-align: center;
+  margin-bottom: 40px;
+  border-bottom: 2px solid #f0f0f0;
+  padding-bottom: 20px;
+}
+
+.header h1 {
+  color: #333;
+  font-size: 2.5rem;
+  margin-bottom: 10px;
+  font-weight: 600;
+}
+
+.header p {
+  color: #666;
+  font-size: 1.1rem;
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+}
+
+/* User Info */
+.user-info {
+  background: #f8f9fa;
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.user-info h2 {
+  color: #333;
+  font-size: 1.5rem;
+  margin-bottom: 15px;
+  font-weight: 600;
+}
+
+.info-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.info-item:last-child {
+  border-bottom: none;
+}
+
+.label {
+  font-weight: 500;
+  color: #666;
+}
+
+.value {
+  font-weight: 600;
+  color: #333;
+}
+
+.value.enabled {
+  color: #28a745;
+}
+
+.value.disabled {
+  color: #dc3545;
+}
+
+/* MFA Section */
+.mfa-section {
+  background: #f8f9fa;
+  border-radius: 12px;
+  padding: 25px;
+}
+
+.mfa-section h2 {
+  color: #333;
+  font-size: 1.5rem;
+  margin-bottom: 20px;
+  font-weight: 600;
+}
+
+/* MFA Setup */
+.mfa-setup {
+  text-align: center;
+}
+
+.setup-info {
+  margin-bottom: 20px;
+}
+
+.setup-info p {
+  color: #666;
+  margin: 5px 0;
+  line-height: 1.5;
+}
+
+/* MFA Setup Process */
+.mfa-setup-process {
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.setup-steps {
+  background: #e3f2fd;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 25px;
+}
+
+.setup-steps h3 {
+  color: #1976d2;
+  font-size: 1.2rem;
+  margin-bottom: 15px;
+  font-weight: 600;
+}
+
+.setup-steps ol {
+  color: #666;
+  padding-left: 20px;
+}
+
+.setup-steps li {
+  margin: 8px 0;
+  line-height: 1.4;
+}
+
+/* QR Code Section */
+.qr-code-section {
+  text-align: center;
+  margin-bottom: 25px;
+}
+
+.qr-code-section h4 {
+  color: #333;
+  font-size: 1.1rem;
+  margin-bottom: 15px;
+  font-weight: 600;
+}
+
+.qr-code-container {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  display: inline-block;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  margin-bottom: 10px;
+}
+
+.qr-code-image {
+  width: 200px;
+  height: 200px;
+  border-radius: 8px;
+}
+
+.qr-help {
+  color: #666;
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+/* Manual Key Section */
+.manual-key-section {
+  margin-bottom: 25px;
+}
+
+.manual-key-section h4 {
+  color: #333;
+  font-size: 1.1rem;
+  margin-bottom: 10px;
+  font-weight: 600;
+}
+
+.key-container {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.secret-key-input {
+  flex: 1;
+  padding: 12px;
+  border: 2px solid #e9ecef;
+  border-radius: 8px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.9rem;
+  background: #f8f9fa;
+  color: #333;
+}
+
+.btn-copy {
+  background: #6c757d;
+  color: white;
+  border: none;
+  padding: 12px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1.2rem;
+  transition: background 0.3s ease;
+}
+
+.btn-copy:hover {
+  background: #5a6268;
+}
+
+/* Verification Section */
+.verification-section {
+  margin-bottom: 25px;
+}
+
+.verification-section h4 {
+  color: #333;
+  font-size: 1.1rem;
+  margin-bottom: 15px;
+  font-weight: 600;
+}
+
+.verification-form {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.verification-input {
+  flex: 1;
+  padding: 12px;
+  border: 2px solid #e9ecef;
+  border-radius: 8px;
+  font-size: 1.1rem;
+  text-align: center;
+  letter-spacing: 2px;
+  font-weight: 600;
+}
+
+.verification-input:focus {
+  border-color: #667eea;
+  outline: none;
+}
+
+.btn-verify {
+  background: #28a745;
+  color: white;
+  border: none;
+  padding: 12px 20px;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.3s ease;
+}
+
+.btn-verify:hover:not(:disabled) {
+  background: #218838;
+}
+
+.btn-verify:disabled {
+  background: #6c757d;
+  cursor: not-allowed;
+}
+
+.verification-error {
+  color: #dc3545;
+  font-size: 0.9rem;
+  margin-top: 10px;
+  text-align: center;
+}
+
+/* Cancel Section */
+.cancel-section {
+  text-align: center;
+}
+
+.btn-cancel {
+  background: #6c757d;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.3s ease;
+}
+
+.btn-cancel:hover {
+  background: #5a6268;
+}
+
+/* MFA Enabled */
+.mfa-enabled {
+  text-align: center;
+}
+
+.enabled-info {
+  background: #d4edda;
+  border-radius: 12px;
+  padding: 25px;
+}
+
+.success-icon {
+  width: 60px;
+  height: 60px;
+  background: #28a745;
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  font-weight: bold;
+  margin: 0 auto 15px;
+}
+
+.enabled-info p {
+  color: #155724;
+  margin: 8px 0;
+  font-weight: 500;
+}
+
+/* Buttons */
+.btn-primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.btn-primary:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
+}
+
+.btn-primary:disabled {
+  background: #6c757d;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.btn-secondary {
+  background: #f8f9fa;
+  color: #666;
+  border: 1px solid #dee2e6;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.btn-secondary:hover {
+  background: #e9ecef;
+  transform: translateY(-2px);
+}
+
+/* Actions */
+.actions {
+  text-align: center;
+  padding-top: 20px;
+  border-top: 2px solid #f0f0f0;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .dashboard-card {
+    padding: 20px;
+    margin: 10px;
+  }
+  
+  .header h1 {
+    font-size: 2rem;
+  }
+  
+  .content {
+    gap: 20px;
+  }
+  
+  .qr-code-image {
+    width: 150px;
+    height: 150px;
+  }
+  
+  .key-container,
+  .verification-form {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .btn-copy,
+  .btn-verify {
+    width: 100%;
+  }
+}
