@@ -1,0 +1,8 @@
+export type RevocationReason = 
+  | 'UNSPECIFIED'
+  | 'KEY_COMPROMISE'
+  | 'AFFILIATION_CHANGED'
+  | 'SUPERSEDED'
+  | 'CESSATION_OF_OPERATION'
+  | 'PRIVILEGE_WITHDRAWN';
+
