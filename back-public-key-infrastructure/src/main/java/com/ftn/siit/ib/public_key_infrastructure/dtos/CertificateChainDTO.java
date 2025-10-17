@@ -5,7 +5,7 @@ import java.util.List;
 
 @Data
 public class CertificateChainDTO {
-    private List<CertificateDTO> chain; // Ordered from end-entity to root
+    private List<CertificateDTO> certificates; // Ordered from end-entity to root
     private boolean valid;
     private String validationMessage;
 }

@@ -18,8 +18,8 @@ public class Certificate {
     private Long id;
     
     @Column(nullable = false, unique = true, length = 64)
-    private String serialNumber;  // 128-bit hex string (32 chars) or larger
-    
+    private String serialNumber;  // Serial number represented as hex
+
     // ===== X.500 Subject Distinguished Name Fields =====
     @Column(nullable = false)
     private String subjectCN;  // Common Name (e.g., "www.example.com")
@@ -65,15 +65,18 @@ public class Certificate {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private CertificateType certificateType;
-    
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private CertificateStatus status = CertificateStatus.VALID;
-    
+    private CertificateStatus status = CertificateStatus.ACTIVE;
+
+    @Column(nullable = false)
+    private boolean canSign;
+
     // ===== Revocation Information =====
     private String revocationReason;  // X.509 standard reasons
     private LocalDateTime revocationDate;
-    
+
     // ===== Cryptographic Material =====
     @Column(nullable = false, columnDefinition = "TEXT")
     private String publicKey;  // PEM format (-----BEGIN PUBLIC KEY-----)
@@ -90,6 +93,9 @@ public class Certificate {
     @Column(nullable = false, columnDefinition = "TEXT")
     private String certificateData;  // Full X.509 certificate in PEM format
     
+    @Column(nullable = false, columnDefinition = "TEXT")
+    private String encodedValue;  // Base64 encoded certificate (like other back-end)
+    
     // ===== X.509 Extensions =====
     @Column(length = 500)
     private String keyUsage;  // Comma-separated: "digitalSignature,keyEncipherment,keyCertSign"
@@ -103,23 +109,30 @@ public class Certificate {
     @Column(length = 500)
     private String crlDistributionPoint;  // URL to CRL
     
-    // ===== Relationships =====
-    @ManyToOne
-    @JoinColumn(name = "owner_id", nullable = false)
-    private User owner;  // User who owns this certificate
+    // ===== Basic Constraints =====
+    private Integer pathLength;  // Path length constraint for CA certificates
     
+    // ===== Relationships =====
     @ManyToOne
     @JoinColumn(name = "issuer_certificate_id")
     private Certificate issuerCertificate;  // Parent CA certificate (null for Root)
     
     @ManyToOne
-    @JoinColumn(name = "template_id")
-    private CertificateTemplate template;  // Template used (if any)
-    
+    @JoinColumn(name = "signing_certificate_id")
+    private Certificate signingCertificate;  // Certificate used to sign this certificate
+
+    @ManyToOne
+    @JoinColumn(name = "signed_by_id", nullable = false)
+    private User signedBy;  // User who initiated the signing operation
+
+    @ManyToOne
+    @JoinColumn(name = "signing_organization_id")
+    private Organization signingOrganization; // Organization responsible for signing
+
     // ===== Metadata =====
     @Column(nullable = false)
     private LocalDateTime createdAt;
-    
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();

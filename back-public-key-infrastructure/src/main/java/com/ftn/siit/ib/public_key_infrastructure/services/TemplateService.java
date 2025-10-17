@@ -53,7 +53,7 @@ public class TemplateService {
      * Authorization:
      * - CA_USER can create templates for their own CA certificates
      * - ADMIN can create templates for any CA certificate
-     * - REGULAR_USER cannot create templates
+     * - EE_USER cannot create templates
      * 
      * @param dto Template creation parameters
      * @param caUser The CA user creating the template

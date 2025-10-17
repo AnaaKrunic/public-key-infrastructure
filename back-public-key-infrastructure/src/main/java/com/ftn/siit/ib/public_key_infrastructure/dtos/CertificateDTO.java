@@ -42,11 +42,16 @@ public class CertificateDTO {
     private String extendedKeyUsage;
     private String subjectAlternativeNames;
     private String crlDistributionPoint;
+    private Boolean canSign;
+    private Integer pathLength;
     private UserDTO owner;
+    private UserDTO signedBy;
     private CertificateDTO issuerCertificate;
+    private CertificateDTO signingCertificate;
     private TemplateDTO template;
+    private OrganizationDTO signingOrganization;
     private LocalDateTime createdAt;
-    
+
     @Data
     @NoArgsConstructor
     @AllArgsConstructor
@@ -56,12 +61,21 @@ public class CertificateDTO {
         private String firstName;
         private String lastName;
     }
-    
+
     @Data
     @NoArgsConstructor
     @AllArgsConstructor
     public static class TemplateDTO {
         private Long id;
         private String name;
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class OrganizationDTO {
+        private Long id;
+        private String name;
+        private String contactEmail;
     }
 }

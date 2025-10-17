@@ -59,4 +59,6 @@ public class CreateEndEntityCertificateDTO {
     private List<String> extendedKeyUsage;
     
     private List<String> subjectAlternativeNames;
+    
+    private String crlDistributionPoint;  // URL to CRL
 }

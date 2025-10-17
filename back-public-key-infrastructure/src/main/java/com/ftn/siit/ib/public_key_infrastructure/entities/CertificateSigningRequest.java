@@ -29,6 +29,14 @@ public class CertificateSigningRequest {
     @ManyToOne
     @JoinColumn(name = "requester_id", nullable = false)
     private User requester;  // User who submitted the CSR
+
+    @ManyToOne
+    @JoinColumn(name = "requested_for_id")
+    private User requestedFor; // End user for whom the certificate is requested
+
+    @ManyToOne
+    @JoinColumn(name = "requested_from_id")
+    private User requestedFrom; // CA user expected to process the CSR
     
     // ===== CA Selection =====
     @ManyToOne

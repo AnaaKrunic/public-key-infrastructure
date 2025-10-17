@@ -56,7 +56,7 @@ public class ValidationService {
         }
 
         // Check certificate status
-        if (issuer.getStatus() != CertificateStatus.VALID) {
+        if (issuer.getStatus() != CertificateStatus.ACTIVE) {
             throw new InvalidCertificateException("Certificate must be VALID to be used as a CA");
         }
 
@@ -303,13 +303,13 @@ public class ValidationService {
             hasPermission = true;
         }
         // Certificate owner can revoke their own certificate
-        else if (certificate.getOwner() != null && certificate.getOwner().getId().equals(requester.getId())) {
+        else if (certificate.getSignedBy() != null && certificate.getSignedBy().getId().equals(requester.getId())) {
             hasPermission = true;
         }
         // CA user can revoke certificates they issued
         else if (requester.getRole() == Role.CA_USER && certificate.getIssuerCertificate() != null &&
-                 certificate.getIssuerCertificate().getOwner() != null &&
-                 certificate.getIssuerCertificate().getOwner().getId().equals(requester.getId())) {
+                 certificate.getIssuerCertificate().getSignedBy() != null &&
+                 certificate.getIssuerCertificate().getSignedBy().getId().equals(requester.getId())) {
             hasPermission = true;
         }
 

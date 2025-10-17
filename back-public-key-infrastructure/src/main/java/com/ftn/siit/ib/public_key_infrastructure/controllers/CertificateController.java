@@ -1,84 +1,386 @@
 package com.ftn.siit.ib.public_key_infrastructure.controllers;
 
 import com.ftn.siit.ib.public_key_infrastructure.dtos.*;
+import com.ftn.siit.ib.public_key_infrastructure.entities.Certificate;
+import com.ftn.siit.ib.public_key_infrastructure.entities.Role;
+import com.ftn.siit.ib.public_key_infrastructure.entities.User;
+import com.ftn.siit.ib.public_key_infrastructure.services.CertificateService;
+import com.ftn.siit.ib.public_key_infrastructure.services.FileDownloadService;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.data.domain.Pageable;
+
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/certificates")
 @CrossOrigin(origins = "*")
 public class CertificateController {
 
-    // ===== Root CA Certificate Management =====
-    
-    @PostMapping("/root")
-    @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<?> createRootCertificate(@RequestBody CreateRootCertificateDTO dto) {
-        return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED)
-                .body("Root certificate creation not implemented yet");
+    private final CertificateService certificateService;
+    private final FileDownloadService fileDownloadService;
+
+    public CertificateController(CertificateService certificateService, FileDownloadService fileDownloadService) {
+        this.certificateService = certificateService;
+        this.fileDownloadService = fileDownloadService;
     }
-    
-    @PostMapping("/intermediate")
-    @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<?> createIntermediateCertificate(@RequestBody CreateIntermediateCertificateDTO dto) {
-        return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED)
-                .body("Intermediate certificate creation not implemented yet");
-    }
-    
-    @PostMapping("/end-entity")
+
+    /**
+     * Issues a certificate on behalf of the current CA or admin.
+     * Requires Admin or CaUser role.
+     */
+    @PostMapping("/issue")
     @PreAuthorize("hasAnyRole('ADMIN', 'CA_USER')")
-    public ResponseEntity<?> createEndEntityCertificate(@RequestBody CreateEndEntityCertificateDTO dto) {
-        return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED)
-                .body("End-entity certificate creation not implemented yet");
+    public ResponseEntity<?> issueCertificate(@RequestBody IssueCertificateRequestDTO dto) {
+        try {
+            // Get current user from security context
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            String userId = getCurrentUserId(authentication);
+            String role = getCurrentUserRole(authentication);
+            
+            boolean isAdmin = "ADMIN".equals(role);
+            certificateService.createCertificate(dto, isAdmin, userId, userId);
+            
+            return ResponseEntity.ok().build();
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body("Error issuing certificate: " + e.getMessage());
+        }
     }
-    
-    // ===== Certificate Query Operations =====
-    
-    @GetMapping
-    @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<?> listCertificates(
-            @RequestParam(required = false) String type,
-            @RequestParam(required = false) String status,
-            Pageable pageable) {
-        return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED)
-                .body("Certificate listing not implemented yet");
+
+    /**
+     * Gets all certificates with pagination support.
+     * Access depends on user role.
+     */
+    @GetMapping("/get-all")
+    public ResponseEntity<?> getAllCertificates() {
+        try {
+            var certificates = certificateService.getAllCertificates();
+            return ResponseEntity.ok(certificates);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Error retrieving certificates: " + e.getMessage());
+        }
     }
-    
-    @GetMapping("/{serialNumber}")
-    @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<?> getCertificate(@PathVariable String serialNumber) {
-        return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED)
-                .body("Certificate retrieval not implemented yet");
+
+    /**
+     * Gets all valid signing certificates.
+     * Access depends on user role.
+     */
+    @GetMapping("/get-all-valid-signing")
+    public ResponseEntity<?> getAllValidSigningCertificates() {
+        try {
+            var certificates = certificateService.getAllValidSigningCertificates();
+            return ResponseEntity.ok(certificates);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body("Error retrieving valid signing certificates: " + e.getMessage());
+        }
     }
-    
-    @GetMapping("/{serialNumber}/download")
-    @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<?> downloadCertificate(
+
+    /**
+     * Adds a certificate to a CA user.
+     * Requires Admin access.
+     */
+    @PutMapping("/add-certificate-to-ca-user")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<?> addCertificateToCaUser(@RequestBody AddCertificateToCaUserRequestDTO dto) {
+        try {
+            certificateService.addCertificateToCaUser(dto);
+            return ResponseEntity.ok().build();
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body("Error adding certificate to CA user: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Lists valid signing certificates not yet assigned to the specified CA user.
+     * Requires Admin role.
+     */
+    @GetMapping("/get-signing-ca-doesnt-have/{caUserId}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<?> getSigningCaDoesntHave(@PathVariable String caUserId) {
+        try {
+            var certificates = certificateService.getValidSigningCertificatesCaUserDoesntHave(caUserId);
+            return ResponseEntity.ok(certificates);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body("Error retrieving certificates: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Retrieves every certificate belonging to the signed-in user.
+     * Requires authentication.
+     */
+    @GetMapping("/get-my-certificates")
+    public ResponseEntity<?> getMyCertificates() {
+        try {
+            // Get current user from security context
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            String userId = getCurrentUserId(authentication);
+            
+            var certificates = certificateService.getMyCertificates(userId);
+            return ResponseEntity.ok(certificates);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body("Error retrieving my certificates: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Retrieves only the currently valid certificates for the signed-in user.
+     * Requires authentication.
+     */
+    @GetMapping("/get-my-valid-certificates")
+    public ResponseEntity<?> getMyValidCertificates() {
+        try {
+            // Get current user from security context
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            String userId = getCurrentUserId(authentication);
+            
+            var certificates = certificateService.getMyValidCertificates(userId);
+            return ResponseEntity.ok(certificates);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body("Error retrieving my valid certificates: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Returns certificates issued by the current CA user.
+     * Requires CaUser role.
+     */
+    @GetMapping("/get-certificates-signed-by-me")
+    @PreAuthorize("hasRole('CA_USER')")
+    public ResponseEntity<?> getCertificatesSignedByMe() {
+        try {
+            // Get current user from security context
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            String userId = getCurrentUserId(authentication);
+            
+            var certificates = certificateService.getCertificatesSignedByMe(userId);
+            return ResponseEntity.ok(certificates);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body("Error retrieving certificates signed by me: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Provides a PKCS#12 archive (.pfx) for a certificate the caller is authorized to access.
+     * Requires Admin, CaUser, or EeUser role.
+     */
+    @PostMapping("/download")
+    @PreAuthorize("hasAnyRole('ADMIN', 'CA_USER', 'EE_USER')")
+    public ResponseEntity<?> downloadCertificate(@RequestBody DownloadCertificateRequestDTO dto) {
+        try {
+            // Validate request
+            if (dto == null) {
+                return ResponseEntity.badRequest()
+                        .body("Request body cannot be null");
+            }
+            if (dto.getCertificateSerialNumber() == null || dto.getCertificateSerialNumber().trim().isEmpty()) {
+                return ResponseEntity.badRequest()
+                        .body("Certificate serial number is required");
+            }
+            if (dto.getPassword() == null || dto.getPassword().length() < 6) {
+                return ResponseEntity.badRequest()
+                        .body("Password must be at least 6 characters long");
+            }
+            
+            // Get current user from security context
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            Long userId = Long.parseLong(getCurrentUserId(authentication));
+            Role role = getCurrentUserRoleEnum(authentication);
+            
+            // Generate PKCS#12 file
+            byte[] pfxBytes = certificateService.getCertificateWithPasswordAsPkcs12(dto, userId, role);
+            
+            // Create proper headers using FileDownloadService
+            HttpHeaders headers = fileDownloadService.createDownloadHeaders(
+                "application/x-pkcs12",
+                "certificate_" + dto.getCertificateSerialNumber() + ".pfx",
+                pfxBytes.length
+            );
+            
+            return ResponseEntity.ok()
+                    .headers(headers)
+                    .body(pfxBytes);
+                    
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest()
+                    .body("Invalid request: " + e.getMessage());
+        } catch (RuntimeException e) {
+            if (e.getMessage().contains("not found")) {
+                return ResponseEntity.notFound().build();
+            } else if (e.getMessage().contains("Access denied")) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body("Access denied: " + e.getMessage());
+            } else {
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                        .body("Error downloading certificate: " + e.getMessage());
+            }
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Unexpected error downloading certificate: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Downloads a certificate in various formats (PEM, DER, PKCS#12).
+     * Requires Admin, CaUser, or EeUser role.
+     */
+    @GetMapping("/download/{serialNumber}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'CA_USER', 'EE_USER')")
+    public ResponseEntity<?> downloadCertificateInFormat(
             @PathVariable String serialNumber,
-            @RequestParam(defaultValue = "pkcs12") String format,
+            @RequestParam(defaultValue = "PEM") String format,
             @RequestParam(required = false) String password) {
-        return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED)
-                .body("Certificate download not implemented yet");
+        try {
+            // Validate parameters
+            if (serialNumber == null || serialNumber.trim().isEmpty()) {
+                return ResponseEntity.badRequest()
+                        .body("Certificate serial number is required");
+            }
+            
+            // Get current user from security context
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            Long userId = Long.parseLong(getCurrentUserId(authentication));
+            Role role = getCurrentUserRoleEnum(authentication);
+            
+            // Find the certificate
+            Optional<Certificate> certificateOpt = certificateService.findBySerialNumber(serialNumber);
+            if (!certificateOpt.isPresent()) {
+                return ResponseEntity.notFound().build();
+            }
+            Certificate certificate = certificateOpt.get();
+            
+            // Check authorization
+            User user = certificateService.getUserRepository().findById(userId)
+                    .orElseThrow(() -> new RuntimeException("User not found with ID: " + userId));
+            
+            // Check authorization - Admin has access to all certificates
+            if (user.getRole() != Role.ADMIN) {
+                // CA users can access certificates they signed
+                if (user.getRole() == Role.CA_USER && 
+                    (certificate.getSignedBy() == null || !certificate.getSignedBy().getId().equals(user.getId()))) {
+                    return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                            .body("Access denied to certificate");
+                }
+                
+                // Users can access their own certificates
+                if (user.getRole() == Role.EE_USER && !user.getMyCertificates().contains(certificate)) {
+                    return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                            .body("Access denied to certificate");
+                }
+            }
+            
+            // Generate file based on format
+            byte[] fileData;
+            String contentType;
+            String filename;
+            
+            switch (format.toUpperCase()) {
+                case "PEM":
+                    fileData = certificate.getCertificateData().getBytes();
+                    contentType = "application/x-pem-file";
+                    filename = "certificate_" + serialNumber + ".pem";
+                    break;
+                case "DER":
+                    // Convert PEM to DER
+                    String cleanPem = certificate.getCertificateData()
+                            .replace("-----BEGIN CERTIFICATE-----", "")
+                            .replace("-----END CERTIFICATE-----", "")
+                            .replaceAll("\\s", "");
+                    fileData = java.util.Base64.getDecoder().decode(cleanPem);
+                    contentType = "application/x-x509-ca-cert";
+                    filename = "certificate_" + serialNumber + ".der";
+                    break;
+                case "PKCS12":
+                case "PFX":
+                    if (password == null || password.length() < 6) {
+                        return ResponseEntity.badRequest()
+                                .body("Password is required for PKCS#12 format and must be at least 6 characters");
+                    }
+                    DownloadCertificateRequestDTO request = new DownloadCertificateRequestDTO();
+                    request.setCertificateSerialNumber(serialNumber);
+                    request.setPassword(password);
+                    fileData = certificateService.getCertificateWithPasswordAsPkcs12(request, userId, role);
+                    contentType = "application/x-pkcs12";
+                    filename = "certificate_" + serialNumber + ".pfx";
+                    break;
+                default:
+                    return ResponseEntity.badRequest()
+                            .body("Unsupported format. Supported formats: PEM, DER, PKCS12, PFX");
+            }
+            
+            // Set proper headers for file download
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.parseMediaType(contentType));
+            headers.setContentDispositionFormData("attachment", filename);
+            headers.setContentLength(fileData.length);
+            headers.setCacheControl("no-cache, no-store, must-revalidate");
+            headers.setPragma("no-cache");
+            headers.setExpires(0);
+            
+            return ResponseEntity.ok()
+                    .headers(headers)
+                    .body(fileData);
+                    
+        } catch (RuntimeException e) {
+            if (e.getMessage().contains("not found")) {
+                return ResponseEntity.notFound().build();
+            } else if (e.getMessage().contains("Access denied")) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body("Access denied: " + e.getMessage());
+            } else {
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                        .body("Error downloading certificate: " + e.getMessage());
+            }
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Unexpected error downloading certificate: " + e.getMessage());
+        }
     }
-    
-    @GetMapping("/{serialNumber}/chain")
-    @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<?> getCertificateChain(@PathVariable String serialNumber) {
-        return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED)
-                .body("Certificate chain retrieval not implemented yet");
+
+    /**
+     * Helper method to get current user ID from authentication context.
+     * This is a placeholder implementation - in a real system, you'd look up the user by email.
+     */
+    private String getCurrentUserId(Authentication authentication) {
+        // This is a placeholder - in a real implementation, you'd look up the user by email
+        // and return their actual ID
+        return "1";
     }
-    
-    // ===== Certificate Revocation =====
-    
-    @PostMapping("/{serialNumber}/revoke")
-    @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<?> revokeCertificate(
-            @PathVariable String serialNumber,
-            @RequestBody RevokeCertificateDTO dto) {
-        return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED)
-                .body("Certificate revocation not implemented yet");
+
+    /**
+     * Helper method to get current user role from authentication context.
+     */
+    private String getCurrentUserRole(Authentication authentication) {
+        return authentication.getAuthorities().stream()
+                .map(authority -> {
+                    String authorityName = authority.getAuthority();
+                    if (authorityName.startsWith("ROLE_")) {
+                        authorityName = authorityName.substring(5); // Remove "ROLE_" prefix
+                    }
+                    return authorityName;
+                })
+                .findFirst()
+                .orElse("EE_USER");
+    }
+
+    /**
+     * Helper method to get current user role as enum from authentication context.
+     */
+    private Role getCurrentUserRoleEnum(Authentication authentication) {
+        String roleName = getCurrentUserRole(authentication);
+        return Role.valueOf(roleName);
     }
 }

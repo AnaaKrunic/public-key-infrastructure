@@ -5,6 +5,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "users")
@@ -31,7 +33,7 @@ public class User {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private Role role = Role.REGULAR_USER;  // Default role
+    private Role role = Role.EE_USER;  // Default role
 
     @ManyToOne
     @JoinColumn(name = "organization_id")
@@ -39,6 +41,9 @@ public class User {
 
     @Column(nullable = false)
     private boolean enabled = false;
+
+    @Column(nullable = false)
+    private boolean emailConfirmed = false;
 
     @Column(unique = true)
     private String activationToken;
@@ -49,5 +54,19 @@ public class User {
 
     @Column(nullable = false)
     private boolean mfaEnabled = false;
+
+    @Column(length = 512)
+    private String refreshToken;
+
+    private LocalDateTime refreshTokenExpiresAt;
+
+    // Many-to-many relationship with certificates
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+        name = "user_certificates",
+        joinColumns = @JoinColumn(name = "user_id"),
+        inverseJoinColumns = @JoinColumn(name = "certificate_id")
+    )
+    private List<Certificate> myCertificates = new ArrayList<>();
 
 }

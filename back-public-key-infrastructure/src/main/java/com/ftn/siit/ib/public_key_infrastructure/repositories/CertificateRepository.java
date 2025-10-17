@@ -4,6 +4,7 @@ import com.ftn.siit.ib.public_key_infrastructure.entities.Certificate;
 import com.ftn.siit.ib.public_key_infrastructure.entities.CertificateStatus;
 import com.ftn.siit.ib.public_key_infrastructure.entities.CertificateType;
 import com.ftn.siit.ib.public_key_infrastructure.entities.User;
+import com.ftn.siit.ib.public_key_infrastructure.entities.Organization;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -20,9 +21,20 @@ public interface CertificateRepository extends JpaRepository<Certificate, Long> 
     // Find by serial number
     Optional<Certificate> findBySerialNumber(String serialNumber);
     
-    // Find by owner
-    List<Certificate> findByOwner(User owner);
-    Page<Certificate> findByOwner(User owner, Pageable pageable);
+    // Find by owner - using many-to-many relationship
+    @Query("SELECT c FROM User u JOIN u.myCertificates c WHERE u = :owner")
+    List<Certificate> findByOwner(@Param("owner") User owner);
+    
+    @Query("SELECT c FROM User u JOIN u.myCertificates c WHERE u = :owner")
+    Page<Certificate> findByOwner(@Param("owner") User owner, Pageable pageable);
+
+    // Find by signer
+    List<Certificate> findBySignedBy(User signedBy);
+    Page<Certificate> findBySignedBy(User signedBy, Pageable pageable);
+
+    // Find by signing organization
+    List<Certificate> findBySigningOrganization(Organization signingOrganization);
+    Page<Certificate> findBySigningOrganization(Organization signingOrganization, Pageable pageable);
     
     // Find by status
     List<Certificate> findByStatus(CertificateStatus status);
@@ -32,13 +44,19 @@ public interface CertificateRepository extends JpaRepository<Certificate, Long> 
     List<Certificate> findByCertificateType(CertificateType certificateType);
     Page<Certificate> findByCertificateType(CertificateType certificateType, Pageable pageable);
     
-    // Find by owner and status
-    List<Certificate> findByOwnerAndStatus(User owner, CertificateStatus status);
-    Page<Certificate> findByOwnerAndStatus(User owner, CertificateStatus status, Pageable pageable);
+    // Find by owner and status - using many-to-many relationship
+    @Query("SELECT c FROM User u JOIN u.myCertificates c WHERE u = :owner AND c.status = :status")
+    List<Certificate> findByOwnerAndStatus(@Param("owner") User owner, @Param("status") CertificateStatus status);
     
-    // Find by owner and type
-    List<Certificate> findByOwnerAndCertificateType(User owner, CertificateType certificateType);
-    Page<Certificate> findByOwnerAndCertificateType(User owner, CertificateType certificateType, Pageable pageable);
+    @Query("SELECT c FROM User u JOIN u.myCertificates c WHERE u = :owner AND c.status = :status")
+    Page<Certificate> findByOwnerAndStatus(@Param("owner") User owner, @Param("status") CertificateStatus status, Pageable pageable);
+    
+    // Find by owner and type - using many-to-many relationship
+    @Query("SELECT c FROM User u JOIN u.myCertificates c WHERE u = :owner AND c.certificateType = :certificateType")
+    List<Certificate> findByOwnerAndCertificateType(@Param("owner") User owner, @Param("certificateType") CertificateType certificateType);
+    
+    @Query("SELECT c FROM User u JOIN u.myCertificates c WHERE u = :owner AND c.certificateType = :certificateType")
+    Page<Certificate> findByOwnerAndCertificateType(@Param("owner") User owner, @Param("certificateType") CertificateType certificateType, Pageable pageable);
     
     // Find by issuer certificate (for building chains)
     List<Certificate> findByIssuerCertificate(Certificate issuerCertificate);
@@ -47,8 +65,8 @@ public interface CertificateRepository extends JpaRepository<Certificate, Long> 
     @Query("SELECT c FROM Certificate c WHERE c.certificateType IN ('ROOT', 'INTERMEDIATE')")
     List<Certificate> findCACertificates();
     
-    // Find CA certificates by owner
-    @Query("SELECT c FROM Certificate c WHERE c.owner = :owner AND c.certificateType IN ('ROOT', 'INTERMEDIATE')")
+    // Find CA certificates by owner - using many-to-many relationship
+    @Query("SELECT c FROM User u JOIN u.myCertificates c WHERE u = :owner AND c.certificateType IN ('ROOT', 'INTERMEDIATE')")
     List<Certificate> findCACertificatesByOwner(@Param("owner") User owner);
     
     // Find certificates in a chain (from a specific CA down to end-entities)
@@ -56,26 +74,6 @@ public interface CertificateRepository extends JpaRepository<Certificate, Long> 
            "(SELECT c2 FROM Certificate c2 WHERE c2.issuerCertificate = :ca)")
     List<Certificate> findCertificatesInChain(@Param("ca") Certificate ca);
     
-    // Find certificates by owner's organization (for CA users)
-    @Query("SELECT c FROM Certificate c WHERE c.owner.organization = :organizationId")
-    List<Certificate> findByOwnerOrganization(@Param("organizationId") Long organizationId);
-    Page<Certificate> findByOwnerOrganization(@Param("organizationId") Long organizationId, Pageable pageable);
-    
-    // Find certificates by owner's organization and status
-    @Query("SELECT c FROM Certificate c WHERE c.owner.organization.id = :organizationId AND c.status = :status")
-    List<Certificate> findByOwnerOrganizationAndStatus(@Param("organizationId") Long organizationId, 
-                                                      @Param("status") CertificateStatus status);
-    Page<Certificate> findByOwnerOrganizationAndStatus(@Param("organizationId") Long organizationId, 
-                                                      @Param("status") CertificateStatus status, 
-                                                      Pageable pageable);
-    
-    // Find certificates by owner's organization and type
-    @Query("SELECT c FROM Certificate c WHERE c.owner.organization.id = :organizationId AND c.certificateType = :type")
-    List<Certificate> findByOwnerOrganizationAndType(@Param("organizationId") Long organizationId, 
-                                                    @Param("type") CertificateType type);
-    Page<Certificate> findByOwnerOrganizationAndType(@Param("organizationId") Long organizationId, 
-                                                    @Param("type") CertificateType type, 
-                                                    Pageable pageable);
     
     // Check if certificate exists by serial number
     boolean existsBySerialNumber(String serialNumber);
@@ -83,4 +81,11 @@ public interface CertificateRepository extends JpaRepository<Certificate, Long> 
     // Find revoked certificates for CRL generation
     @Query("SELECT c FROM Certificate c WHERE c.status = 'REVOKED' AND c.issuerCertificate = :issuer")
     List<Certificate> findRevokedCertificatesByIssuer(@Param("issuer") Certificate issuer);
+    
+    // Find certificates by owner or issued by owner's CA certificates - using many-to-many relationship
+    @Query("SELECT c FROM User u JOIN u.myCertificates c WHERE u = :owner OR " +
+           "(c.issuerCertificate IS NOT NULL AND c.issuerCertificate IN (SELECT c2 FROM User u2 JOIN u2.myCertificates c2 WHERE u2 = :issuerOwner))")
+    Page<Certificate> findByOwnerOrIssuerCertificateOwner(@Param("owner") User owner, 
+                                                         @Param("issuerOwner") User issuerOwner, 
+                                                         Pageable pageable);
 }

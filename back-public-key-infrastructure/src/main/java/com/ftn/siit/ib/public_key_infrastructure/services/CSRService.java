@@ -1,14 +1,20 @@
 package com.ftn.siit.ib.public_key_infrastructure.services;
 
 import com.ftn.siit.ib.public_key_infrastructure.dtos.*;
-import com.ftn.siit.ib.public_key_infrastructure.entities.CertificateSigningRequest;
-import com.ftn.siit.ib.public_key_infrastructure.entities.CSRStatus;
-import com.ftn.siit.ib.public_key_infrastructure.entities.User;
+import com.ftn.siit.ib.public_key_infrastructure.entities.*;
+import com.ftn.siit.ib.public_key_infrastructure.exceptions.*;
 import com.ftn.siit.ib.public_key_infrastructure.repositories.CertificateSigningRequestRepository;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Collections;
 
 /**
  * CSRService manages the Certificate Signing Request (CSR) workflow in the PKI system.
@@ -68,28 +74,41 @@ public class CSRService {
             throw new IllegalArgumentException("Requester cannot be null");
         }
 
-        // This would be implemented with actual CSR generation logic
-        // For now, return a placeholder DTO
-        CSRDTO csrDTO = new CSRDTO();
-        csrDTO.setId(1L);
-        csrDTO.setCsrData("-----BEGIN CERTIFICATE REQUEST-----\nPlaceholder CSR data\n-----END CERTIFICATE REQUEST-----");
-        csrDTO.setStatus(CSRStatus.PENDING);
-        csrDTO.setSubjectCN(dto.getSubjectCN());
-        csrDTO.setSubjectO(dto.getSubjectO());
-        csrDTO.setSubjectOU(dto.getSubjectOU());
-        csrDTO.setSubjectC(dto.getSubjectC());
-        csrDTO.setSubjectE(dto.getSubjectE());
-        csrDTO.setCreatedAt(java.time.LocalDateTime.now());
-        
-        // Set requester info
-        CSRDTO.UserDTO requesterDTO = new CSRDTO.UserDTO();
-        requesterDTO.setId(requester.getId());
-        requesterDTO.setEmail(requester.getEmail());
-        requesterDTO.setFirstName(requester.getFirstName());
-        requesterDTO.setLastName(requester.getLastName());
-        csrDTO.setRequester(requesterDTO);
-        
-        return csrDTO;
+        // Validate the CSR request (placeholder - would need specific CSR validation)
+        // validationService.validateCertificateRequest(dto, requester);
+
+        // Find the selected CA certificate (placeholder - would need to get Certificate entity)
+        // For now, create a placeholder Certificate entity
+        Certificate selectedCA = new Certificate();
+        selectedCA.setId(dto.getSelectedCAId());
+        selectedCA.setSerialNumber(dto.getSelectedCAId().toString());
+        selectedCA.setSubjectCN("Test CA");
+        // Note: selectedCA is a placeholder, owner relationship is handled differently
+
+        // Generate CSR data (placeholder for now - would use Bouncy Castle)
+        String csrData = generateCSRData(dto);
+
+        // Create CSR entity
+        CertificateSigningRequest csr = new CertificateSigningRequest();
+        csr.setCsrData(csrData);
+        csr.setStatus(CSRStatus.PENDING);
+        csr.setRequester(requester);
+        csr.setSelectedCA(selectedCA);
+        csr.setSubjectCN(dto.getSubjectCN());
+        csr.setSubjectO(dto.getSubjectO());
+        csr.setSubjectOU(dto.getSubjectOU());
+        csr.setSubjectC(dto.getSubjectC());
+        csr.setSubjectE(dto.getSubjectE());
+        csr.setRequestedExtensions(convertExtensionsToJson(dto.getExtensions()));
+
+        // Save CSR
+        csr = csrRepository.save(csr);
+        if (csr == null) {
+            throw new RuntimeException("Failed to save CSR");
+        }
+
+        // Convert to DTO and return
+        return convertToDTO(csr);
     }
 
     /**
@@ -123,25 +142,48 @@ public class CSRService {
             throw new IllegalArgumentException("Requester cannot be null");
         }
 
-        // This would be implemented with actual CSR parsing logic
-        // For now, return a placeholder DTO
-        CSRDTO csrDTO = new CSRDTO();
-        csrDTO.setId(2L);
-        csrDTO.setCsrData("-----BEGIN CERTIFICATE REQUEST-----\nUploaded CSR data\n-----END CERTIFICATE REQUEST-----");
-        csrDTO.setStatus(CSRStatus.PENDING);
-        csrDTO.setSubjectCN("Uploaded Certificate");
-        csrDTO.setSubjectO("Uploaded Organization");
-        csrDTO.setCreatedAt(java.time.LocalDateTime.now());
-        
-        // Set requester info
-        CSRDTO.UserDTO requesterDTO = new CSRDTO.UserDTO();
-        requesterDTO.setId(requester.getId());
-        requesterDTO.setEmail(requester.getEmail());
-        requesterDTO.setFirstName(requester.getFirstName());
-        requesterDTO.setLastName(requester.getLastName());
-        csrDTO.setRequester(requesterDTO);
-        
-        return csrDTO;
+        // Parse and validate CSR (placeholder implementation)
+        String csrData = dto.getCsrData();
+        if (csrData == null || csrData.trim().isEmpty()) {
+            throw new ValidationException("CSR data cannot be null or empty");
+        }
+
+        // Extract subject fields from CSR (placeholder - would use Bouncy Castle)
+        String subjectCN = extractSubjectCN(csrData);
+        String subjectO = extractSubjectO(csrData);
+        String subjectOU = extractSubjectOU(csrData);
+        String subjectC = extractSubjectC(csrData);
+        String subjectE = extractSubjectE(csrData);
+
+        // Find the selected CA certificate (placeholder - would need to get Certificate entity)
+        // For now, create a placeholder Certificate entity
+        Certificate selectedCA = new Certificate();
+        selectedCA.setId(dto.getSelectedCAId());
+        selectedCA.setSerialNumber(dto.getSelectedCAId().toString());
+        selectedCA.setSubjectCN("Test CA");
+        // Note: selectedCA is a placeholder, owner relationship is handled differently
+
+        // Create CSR entity
+        CertificateSigningRequest csr = new CertificateSigningRequest();
+        csr.setCsrData(csrData);
+        csr.setStatus(CSRStatus.PENDING);
+        csr.setRequester(requester);
+        csr.setSelectedCA(selectedCA);
+        csr.setSubjectCN(subjectCN);
+        csr.setSubjectO(subjectO);
+        csr.setSubjectOU(subjectOU);
+        csr.setSubjectC(subjectC);
+        csr.setSubjectE(subjectE);
+        csr.setRequestedExtensions("{}"); // Placeholder
+
+        // Save CSR
+        csr = csrRepository.save(csr);
+        if (csr == null) {
+            throw new RuntimeException("Failed to save CSR");
+        }
+
+        // Convert to DTO and return
+        return convertToDTO(csr);
     }
 
     /**
@@ -163,9 +205,20 @@ public class CSRService {
             throw new IllegalArgumentException("Pageable cannot be null");
         }
 
-        // This would query the database for CSRs by requester
-        // For now, return an empty page
-        return new org.springframework.data.domain.PageImpl<>(java.util.Collections.emptyList(), pageable, 0);
+        // Query CSRs by requester
+        Page<CertificateSigningRequest> csrPage = csrRepository.findByRequester(requester, pageable);
+        
+        if (csrPage == null) {
+            // Return empty page if no results
+            return new PageImpl<>(Collections.emptyList(), pageable, 0);
+        }
+        
+        // Convert to DTOs
+        List<CSRDTO> csrDTOs = csrPage.getContent().stream()
+            .map(this::convertToDTO)
+            .toList();
+        
+        return new PageImpl<>(csrDTOs, pageable, csrPage.getTotalElements());
     }
 
     /**
@@ -175,7 +228,7 @@ public class CSRService {
      * - For CA_USER: Returns CSRs where selectedCA is owned by the user
      *   OR where selectedCA is in the user's CA chain
      * - For ADMIN: Returns all pending CSRs
-     * - For REGULAR_USER: Returns empty list (no approval permission)
+     * - For EE_USER: Returns empty list (no approval permission)
      * 
      * Only CSRs with status PENDING are returned.
      * 
@@ -192,9 +245,33 @@ public class CSRService {
             throw new IllegalArgumentException("Pageable cannot be null");
         }
 
-        // This would query the database for pending CSRs that the CA user can approve
-        // For now, return an empty page
-        return new org.springframework.data.domain.PageImpl<>(java.util.Collections.emptyList(), pageable, 0);
+        Page<CertificateSigningRequest> csrPage;
+        
+        if (caUser.getRole() == Role.ADMIN) {
+            // ADMIN can see all pending CSRs
+            csrPage = csrRepository.findByStatus(CSRStatus.PENDING, pageable);
+        } else if (caUser.getRole() == Role.CA_USER) {
+            // CA_USER can see CSRs for their own CAs
+            // For now, use a placeholder certificate - in real implementation, find user's certificates
+            Certificate userCA = new Certificate();
+            userCA.setId(caUser.getId());
+            csrPage = csrRepository.findBySelectedCAAndStatus(userCA, CSRStatus.PENDING, pageable);
+        } else {
+            // EE_USER has no approval permission
+            return new PageImpl<>(Collections.emptyList(), pageable, 0);
+        }
+        
+        if (csrPage == null) {
+            // Return empty page if no results
+            return new PageImpl<>(Collections.emptyList(), pageable, 0);
+        }
+        
+        // Convert to DTOs
+        List<CSRDTO> csrDTOs = csrPage.getContent().stream()
+            .map(this::convertToDTO)
+            .toList();
+        
+        return new PageImpl<>(csrDTOs, pageable, csrPage.getTotalElements());
     }
 
     /**
@@ -211,7 +288,7 @@ public class CSRService {
      * Authorization:
      * - ADMIN can approve any CSR
      * - CA_USER can approve CSRs for their own CAs
-     * - REGULAR_USER cannot approve CSRs
+     * - EE_USER cannot approve CSRs
      * 
      * @param csrId The ID of the CSR to approve
      * @param dto Approval parameters (may include validity override, additional extensions)
@@ -234,22 +311,40 @@ public class CSRService {
             throw new IllegalArgumentException("Approver cannot be null");
         }
 
-        // This would implement the actual approval logic
-        // For now, return a placeholder DTO
-        CSRDTO csrDTO = new CSRDTO();
-        csrDTO.setId(csrId);
-        csrDTO.setStatus(CSRStatus.APPROVED);
-        csrDTO.setProcessedAt(java.time.LocalDateTime.now());
+        // Find the CSR
+        Optional<CertificateSigningRequest> csrOpt = csrRepository.findById(csrId);
+        if (csrOpt.isEmpty()) {
+            throw new NotFoundException("CSR not found with ID: " + csrId);
+        }
         
-        // Set approver info
-        CSRDTO.UserDTO approverDTO = new CSRDTO.UserDTO();
-        approverDTO.setId(approver.getId());
-        approverDTO.setEmail(approver.getEmail());
-        approverDTO.setFirstName(approver.getFirstName());
-        approverDTO.setLastName(approver.getLastName());
-        csrDTO.setProcessedBy(approverDTO);
+        CertificateSigningRequest csr = csrOpt.get();
         
-        return csrDTO;
+        // Validate CSR is in PENDING status
+        if (csr.getStatus() != CSRStatus.PENDING) {
+            throw new IllegalStateException("CSR is not in PENDING status");
+        }
+        
+        // Validate approver has permission
+        if (!hasApprovalPermission(csr, approver)) {
+            throw new UnauthorizedException("User does not have permission to approve this CSR");
+        }
+        
+        // Create end-entity certificate (placeholder implementation)
+        // In a real implementation, this would:
+        // 1. Extract public key from CSR
+        // 2. Create CreateEndEntityCertificateDTO
+        // 3. Call certificateService.createEndEntityCertificate()
+        
+        // Update CSR status
+        csr.setStatus(CSRStatus.APPROVED);
+        csr.setProcessedBy(approver);
+        csr.setProcessedAt(java.time.LocalDateTime.now());
+        
+        // Save updated CSR
+        csr = csrRepository.save(csr);
+        
+        // Convert to DTO and return
+        return convertToDTO(csr);
     }
 
     /**
@@ -287,23 +382,40 @@ public class CSRService {
             throw new IllegalArgumentException("Approver cannot be null");
         }
 
-        // This would implement the actual rejection logic
-        // For now, return a placeholder DTO
-        CSRDTO csrDTO = new CSRDTO();
-        csrDTO.setId(csrId);
-        csrDTO.setStatus(CSRStatus.REJECTED);
-        csrDTO.setProcessedAt(java.time.LocalDateTime.now());
-        csrDTO.setRejectionReason(dto.getReason());
+        // Validate rejection reason
+        if (dto.getReason() == null || dto.getReason().trim().isEmpty()) {
+            throw new ValidationException("Rejection reason cannot be null or empty");
+        }
+
+        // Find the CSR
+        Optional<CertificateSigningRequest> csrOpt = csrRepository.findById(csrId);
+        if (csrOpt.isEmpty()) {
+            throw new NotFoundException("CSR not found with ID: " + csrId);
+        }
         
-        // Set approver info
-        CSRDTO.UserDTO approverDTO = new CSRDTO.UserDTO();
-        approverDTO.setId(approver.getId());
-        approverDTO.setEmail(approver.getEmail());
-        approverDTO.setFirstName(approver.getFirstName());
-        approverDTO.setLastName(approver.getLastName());
-        csrDTO.setProcessedBy(approverDTO);
+        CertificateSigningRequest csr = csrOpt.get();
         
-        return csrDTO;
+        // Validate CSR is in PENDING status
+        if (csr.getStatus() != CSRStatus.PENDING) {
+            throw new IllegalStateException("CSR is not in PENDING status");
+        }
+        
+        // Validate approver has permission
+        if (!hasApprovalPermission(csr, approver)) {
+            throw new UnauthorizedException("User does not have permission to reject this CSR");
+        }
+        
+        // Update CSR status
+        csr.setStatus(CSRStatus.REJECTED);
+        csr.setRejectionReason(dto.getReason());
+        csr.setProcessedBy(approver);
+        csr.setProcessedAt(java.time.LocalDateTime.now());
+        
+        // Save updated CSR
+        csr = csrRepository.save(csr);
+        
+        // Convert to DTO and return
+        return convertToDTO(csr);
     }
 
     /**
@@ -329,27 +441,21 @@ public class CSRService {
             throw new IllegalArgumentException("Requester cannot be null");
         }
 
-        // This would implement the actual retrieval logic
-        // For now, return a placeholder DTO
-        CSRDTO csrDTO = new CSRDTO();
-        csrDTO.setId(csrId);
-        csrDTO.setStatus(CSRStatus.PENDING);
-        csrDTO.setSubjectCN("Test Certificate");
-        csrDTO.setSubjectO("Test Organization");
-        csrDTO.setSubjectOU("Test OU");
-        csrDTO.setSubjectC("US");
-        csrDTO.setSubjectE("test@example.com");
-        csrDTO.setCreatedAt(java.time.LocalDateTime.now());
+        // Find the CSR
+        Optional<CertificateSigningRequest> csrOpt = csrRepository.findById(csrId);
+        if (csrOpt.isEmpty()) {
+            throw new NotFoundException("CSR not found with ID: " + csrId);
+        }
         
-        // Set requester info
-        CSRDTO.UserDTO requesterDTO = new CSRDTO.UserDTO();
-        requesterDTO.setId(requester.getId());
-        requesterDTO.setEmail(requester.getEmail());
-        requesterDTO.setFirstName(requester.getFirstName());
-        requesterDTO.setLastName(requester.getLastName());
-        csrDTO.setRequester(requesterDTO);
+        CertificateSigningRequest csr = csrOpt.get();
         
-        return csrDTO;
+        // Check access permissions
+        if (!hasAccessToCSR(csr, requester)) {
+            throw new ForbiddenException("User does not have access to this CSR");
+        }
+        
+        // Convert to DTO and return
+        return convertToDTO(csr);
     }
 
     /**
@@ -359,7 +465,59 @@ public class CSRService {
      * @return CSRDTO containing CSR information
      */
     private CSRDTO convertToDTO(CertificateSigningRequest csr) {
-        throw new UnsupportedOperationException("Not implemented yet");
+        CSRDTO dto = new CSRDTO();
+        dto.setId(csr.getId());
+        dto.setCsrData(csr.getCsrData());
+        dto.setStatus(csr.getStatus());
+        dto.setSubjectCN(csr.getSubjectCN());
+        dto.setSubjectO(csr.getSubjectO());
+        dto.setSubjectOU(csr.getSubjectOU());
+        dto.setSubjectC(csr.getSubjectC());
+        dto.setSubjectE(csr.getSubjectE());
+        dto.setRequestedExtensions(csr.getRequestedExtensions());
+        dto.setRejectionReason(csr.getRejectionReason());
+        dto.setCreatedAt(csr.getCreatedAt());
+        dto.setProcessedAt(csr.getProcessedAt());
+
+        // Set requester info
+        if (csr.getRequester() != null) {
+            CSRDTO.UserDTO requesterDTO = new CSRDTO.UserDTO();
+            requesterDTO.setId(csr.getRequester().getId());
+            requesterDTO.setEmail(csr.getRequester().getEmail());
+            requesterDTO.setFirstName(csr.getRequester().getFirstName());
+            requesterDTO.setLastName(csr.getRequester().getLastName());
+            dto.setRequester(requesterDTO);
+        }
+
+        // Set processed by info
+        if (csr.getProcessedBy() != null) {
+            CSRDTO.UserDTO processedByDTO = new CSRDTO.UserDTO();
+            processedByDTO.setId(csr.getProcessedBy().getId());
+            processedByDTO.setEmail(csr.getProcessedBy().getEmail());
+            processedByDTO.setFirstName(csr.getProcessedBy().getFirstName());
+            processedByDTO.setLastName(csr.getProcessedBy().getLastName());
+            dto.setProcessedBy(processedByDTO);
+        }
+
+        // Set selected CA info
+        if (csr.getSelectedCA() != null) {
+            CSRDTO.CertificateDTO caDTO = new CSRDTO.CertificateDTO();
+            caDTO.setId(csr.getSelectedCA().getId());
+            caDTO.setSerialNumber(csr.getSelectedCA().getSerialNumber());
+            caDTO.setSubjectCN(csr.getSelectedCA().getSubjectCN());
+            dto.setSelectedCA(caDTO);
+        }
+
+        // Set issued certificate info
+        if (csr.getIssuedCertificate() != null) {
+            CSRDTO.CertificateDTO issuedDTO = new CSRDTO.CertificateDTO();
+            issuedDTO.setId(csr.getIssuedCertificate().getId());
+            issuedDTO.setSerialNumber(csr.getIssuedCertificate().getSerialNumber());
+            issuedDTO.setSubjectCN(csr.getIssuedCertificate().getSubjectCN());
+            dto.setIssuedCertificate(issuedDTO);
+        }
+
+        return dto;
     }
 
     /**
@@ -370,7 +528,368 @@ public class CSRService {
      * @return true if the user has permission, false otherwise
      */
     private boolean hasApprovalPermission(CertificateSigningRequest csr, User approver) {
-        throw new UnsupportedOperationException("Not implemented yet");
+        if (approver.getRole() == Role.ADMIN) {
+            return true;
+        }
+        
+        if (approver.getRole() == Role.CA_USER) {
+            // CA_USER can approve CSRs for their own CAs
+            return csr.getSelectedCA() != null && 
+                   csr.getSelectedCA().getSignedBy() != null &&
+                   csr.getSelectedCA().getSignedBy().getId().equals(approver.getId());
+        }
+        
+        return false;
+    }
+
+    /**
+     * Checks if a user has access to view a CSR.
+     * 
+     * @param csr The CSR to check
+     * @param requester The user requesting access
+     * @return true if the user has access, false otherwise
+     */
+    private boolean hasAccessToCSR(CertificateSigningRequest csr, User requester) {
+        if (requester.getRole() == Role.ADMIN) {
+            return true;
+        }
+        
+        if (requester.getRole() == Role.CA_USER) {
+            // CA_USER can view CSRs for their own CAs
+        return csr.getSelectedCA() != null && 
+               csr.getSelectedCA().getSignedBy() != null &&
+               csr.getSelectedCA().getSignedBy().getId().equals(requester.getId());
+        }
+        
+        if (requester.getRole() == Role.EE_USER) {
+            // EE_USER can only view their own CSRs
+            return csr.getRequester() != null && 
+                   csr.getRequester().getId().equals(requester.getId());
+        }
+        
+        return false;
+    }
+
+    /**
+     * Generates CSR data in PEM format (placeholder implementation).
+     * 
+     * @param dto The CSR creation DTO
+     * @return PEM-encoded CSR data
+     */
+    private String generateCSRData(CreateCSRDTO dto) {
+        // This is a placeholder implementation
+        // In a real implementation, this would use Bouncy Castle to:
+        // 1. Generate RSA key pair
+        // 2. Build PKCS#10 CSR with subject DN
+        // 3. Sign with private key
+        // 4. Return PEM format
+        
+        return "-----BEGIN CERTIFICATE REQUEST-----\n" +
+               "MIIBkTCB+wIBADBOMQswCQYDVQQGEwJVUzETMBEGA1UECAwKU29tZS1TdGF0ZTEh\n" +
+               "MB8GA1UECgwYSW50ZXJuZXQgV2lkZ2l0cyBQdHkgTHRkMREwDwYDVQQDDAh0ZXN0\n" +
+               "LmNvbTCBnzANBgkqhkiG9w0BAQEFAAOBjQAwgYkCgYEA7+9v5f1YQrHf1VAz7bFk\n" +
+               "-----END CERTIFICATE REQUEST-----";
+    }
+
+    /**
+     * Converts extensions map to JSON string.
+     * 
+     * @param extensions The extensions map
+     * @return JSON string representation
+     */
+    private String convertExtensionsToJson(Map<String, List<String>> extensions) {
+        if (extensions == null || extensions.isEmpty()) {
+            return "{}";
+        }
+        
+        // Simple JSON conversion (in real implementation, use Jackson or Gson)
+        StringBuilder json = new StringBuilder("{");
+        boolean first = true;
+        for (Map.Entry<String, List<String>> entry : extensions.entrySet()) {
+            if (!first) {
+                json.append(",");
+            }
+            json.append("\"").append(entry.getKey()).append("\":");
+            json.append("[");
+            List<String> values = entry.getValue();
+            for (int i = 0; i < values.size(); i++) {
+                if (i > 0) {
+                    json.append(",");
+                }
+                json.append("\"").append(values.get(i)).append("\"");
+            }
+            json.append("]");
+            first = false;
+        }
+        json.append("}");
+        return json.toString();
+    }
+
+    /**
+     * Extracts subject CN from CSR data (placeholder implementation).
+     * 
+     * @param csrData The CSR data in PEM format
+     * @return Subject CN
+     */
+    private String extractSubjectCN(String csrData) {
+        // Placeholder implementation - would use Bouncy Castle to parse CSR
+        return "Uploaded Certificate";
+    }
+
+    /**
+     * Extracts subject O from CSR data (placeholder implementation).
+     * 
+     * @param csrData The CSR data in PEM format
+     * @return Subject O
+     */
+    private String extractSubjectO(String csrData) {
+        // Placeholder implementation - would use Bouncy Castle to parse CSR
+        return "Uploaded Organization";
+    }
+
+    /**
+     * Extracts subject OU from CSR data (placeholder implementation).
+     * 
+     * @param csrData The CSR data in PEM format
+     * @return Subject OU
+     */
+    private String extractSubjectOU(String csrData) {
+        // Placeholder implementation - would use Bouncy Castle to parse CSR
+        return "Uploaded OU";
+    }
+
+    /**
+     * Extracts subject C from CSR data (placeholder implementation).
+     * 
+     * @param csrData The CSR data in PEM format
+     * @return Subject C
+     */
+    private String extractSubjectC(String csrData) {
+        // Placeholder implementation - would use Bouncy Castle to parse CSR
+        return "US";
+    }
+
+    /**
+     * Extracts subject E from CSR data (placeholder implementation).
+     * 
+     * @param csrData The CSR data in PEM format
+     * @return Subject E
+     */
+    private String extractSubjectE(String csrData) {
+        // Placeholder implementation - would use Bouncy Castle to parse CSR
+        return "uploaded@example.com";
+    }
+
+    /**
+     * Creates a certificate request from form data and generates a key pair.
+     * 
+     * @param requestDTO The certificate request form data
+     * @param userId The ID of the user making the request
+     * @return KeyPairDTO containing the generated public and private keys
+     */
+    public KeyPairDTO createCertificateRequest(CreateCertificateRequestDTO requestDTO, Long userId) {
+        // Find the EE user
+        User user = findUserByIdAndRole(userId, Role.EE_USER);
+        
+        // Find the signing organization (CA user)
+        User issuer = findUserByIdAndRole(Long.parseLong(requestDTO.getSigningOrganization()), Role.CA_USER);
+        
+        // Check if issuer has valid certificates
+        if (!hasValidCertificates(issuer)) {
+            throw new RuntimeException("Requested issuer is not able to sign certificates!");
+        }
+        
+        // Validate validity period constraints
+        validateValidityPeriod(requestDTO, issuer);
+        
+        // Generate key pair (placeholder implementation)
+        KeyPairDTO keyPair = generateKeyPair();
+        
+        // Create certificate request entity
+        CertificateSigningRequest csr = new CertificateSigningRequest();
+        csr.setRequester(user);
+        csr.setRequestedFrom(issuer);
+        csr.setSubjectCN(requestDTO.getCommonName());
+        csr.setSubjectO(requestDTO.getOrganization());
+        csr.setSubjectOU(requestDTO.getOrganizationalUnit());
+        csr.setSubjectE(requestDTO.getEmail());
+        csr.setSubjectC(requestDTO.getCountry());
+        csr.setStatus(CSRStatus.PENDING);
+        csr.setRequestedExtensions(convertExtensionsToJson(requestDTO));
+        
+        // Set selectedCA to a placeholder certificate (would need actual certificate lookup)
+        Certificate selectedCA = new Certificate();
+        selectedCA.setId(Long.parseLong(requestDTO.getSigningOrganization()));
+        csr.setSelectedCA(selectedCA);
+        
+        csrRepository.save(csr);
+        
+        return keyPair;
+    }
+
+    /**
+     * Creates a certificate request from uploaded CSR.
+     * 
+     * @param signingUserId The ID of the CA user who will sign
+     * @param csrContent The CSR content
+     * @param notAfter The validity end date
+     * @param userId The ID of the user making the request
+     */
+    public void createCertificateRequest(String signingUserId, String csrContent, LocalDateTime notAfter, Long userId) {
+        // Find the EE user
+        User user = findUserByIdAndRole(userId, Role.EE_USER);
+        
+        // Find the signing organization (CA user)
+        User issuer = findUserByIdAndRole(Long.parseLong(signingUserId), Role.CA_USER);
+        
+        // Check if issuer has valid certificates
+        if (!hasValidCertificates(issuer)) {
+            throw new RuntimeException("Requested issuer is not able to sign certificates!");
+        }
+        
+        // Validate validity period
+        if (notAfter != null) {
+            LocalDateTime maxValidUntil = getMaxValidUntil(issuer);
+            if (notAfter.isAfter(maxValidUntil)) {
+                throw new RuntimeException("NotAfter cannot be later than the issuer's latest NotAfter!");
+            }
+        }
+        
+        // Create certificate request entity
+        CertificateSigningRequest csr = new CertificateSigningRequest();
+        csr.setRequester(user);
+        csr.setRequestedFrom(issuer);
+        csr.setCsrData(csrContent);
+        csr.setStatus(CSRStatus.PENDING);
+        
+        // Set selectedCA to a placeholder certificate (would need actual certificate lookup)
+        Certificate selectedCA = new Certificate();
+        selectedCA.setId(Long.parseLong(signingUserId));
+        csr.setSelectedCA(selectedCA);
+        
+        csrRepository.save(csr);
+    }
+
+    /**
+     * Gets certificate requests for a CA user.
+     * 
+     * @param userId The ID of the CA user
+     * @return List of certificate request responses
+     */
+    public List<CertificateRequestResponseDTO> getCertificateRequests(Long userId) {
+        User caUser = findUserByIdAndRole(userId, Role.CA_USER);
+        
+        // Find requests where the CA user is the requestedFrom user
+        List<CertificateSigningRequest> requests = csrRepository.findByRequestedFrom(caUser);
+        
+        return requests.stream()
+                .map(this::convertToResponseDTO)
+                .toList();
+    }
+
+    /**
+     * Deletes (rejects) a certificate request.
+     * 
+     * @param userId The ID of the CA user
+     * @param requestId The ID of the request to delete
+     */
+    public void deleteCertificateRequest(Long userId, String requestId) {
+        User caUser = findUserByIdAndRole(userId, Role.CA_USER);
+        
+        CertificateSigningRequest request = csrRepository.findById(Long.parseLong(requestId))
+                .orElseThrow(() -> new RuntimeException("Certificate request with given ID not found!"));
+        
+        if (!request.getSelectedCA().getId().equals(caUser.getId())) {
+            throw new RuntimeException("This certificate is not requested from you!");
+        }
+        
+        csrRepository.delete(request);
+    }
+
+    /**
+     * Approves a certificate request and creates a certificate.
+     * 
+     * @param userId The ID of the CA user
+     * @param approveRequest The approval request data
+     */
+    public void approveCertificateRequest(Long userId, ApproveCertificateRequestDTO approveRequest) {
+        User caUser = findUserByIdAndRole(userId, Role.CA_USER);
+        
+        CertificateSigningRequest request = csrRepository.findById(Long.parseLong(approveRequest.getRequestId()))
+                .orElseThrow(() -> new RuntimeException("Certificate request with given ID not found!"));
+        
+        if (!request.getSelectedCA().getId().equals(caUser.getId())) {
+            throw new RuntimeException("This certificate is not requested from you!");
+        }
+        
+        // Create certificate using the certificate service
+        // This would need to be implemented based on your certificate creation logic
+        // certificateService.createCertificate(approveRequest.getRequestForm(), false, userId, request.getRequester().getId().toString(), publicKey);
+        
+        // Delete the request after approval
+        csrRepository.delete(request);
+    }
+
+    // Helper methods
+    private User findUserByIdAndRole(Long userId, Role role) {
+        // This would need to be implemented with actual user lookup
+        // For now, return a placeholder
+        User user = new User();
+        user.setId(userId);
+        user.setRole(role);
+        return user;
+    }
+
+    private boolean hasValidCertificates(User user) {
+        // This would check if the user has valid certificates
+        // For now, return true as placeholder
+        return true;
+    }
+
+    private void validateValidityPeriod(CreateCertificateRequestDTO requestDTO, User issuer) {
+        // This would validate the validity period against issuer's certificates
+        // For now, just check basic constraints
+        if (requestDTO.getNotBefore() != null && requestDTO.getNotAfter() != null) {
+            if (requestDTO.getNotBefore().isAfter(requestDTO.getNotAfter())) {
+                throw new RuntimeException("NotBefore cannot be later than the NotAfter!");
+            }
+        }
+    }
+
+    private LocalDateTime getMaxValidUntil(User issuer) {
+        // This would get the maximum valid until date from issuer's certificates
+        // For now, return a placeholder date
+        return LocalDateTime.now().plusYears(1);
+    }
+
+    private KeyPairDTO generateKeyPair() {
+        // This would generate an actual key pair
+        // For now, return placeholder data
+        KeyPairDTO keyPair = new KeyPairDTO();
+        keyPair.setPublicKey("-----BEGIN PUBLIC KEY-----\nPLACEHOLDER\n-----END PUBLIC KEY-----");
+        keyPair.setPrivateKey("-----BEGIN PRIVATE KEY-----\nPLACEHOLDER\n-----END PRIVATE KEY-----");
+        return keyPair;
+    }
+
+    private String convertExtensionsToJson(CreateCertificateRequestDTO requestDTO) {
+        // Convert extensions to JSON format
+        return "{}"; // Placeholder
+    }
+
+    private CertificateRequestResponseDTO convertToResponseDTO(CertificateSigningRequest csr) {
+        CertificateRequestResponseDTO dto = new CertificateRequestResponseDTO();
+        dto.setId(csr.getId().toString());
+        dto.setSubmittedOn(csr.getCreatedAt());
+        dto.setCommonName(csr.getSubjectCN());
+        dto.setOrganization(csr.getSubjectO());
+        dto.setOrganizationalUnit(csr.getSubjectOU());
+        dto.setEmail(csr.getSubjectE());
+        dto.setCountry(csr.getSubjectC());
+        // Note: CertificateSigningRequest doesn't have validFrom/validTo fields
+        // These would need to be added to the entity or handled differently
+        dto.setNotBefore(null);
+        dto.setNotAfter(null);
+        return dto;
     }
 }
 

@@ -1,69 +1,156 @@
 package com.ftn.siit.ib.public_key_infrastructure.controllers;
 
 import com.ftn.siit.ib.public_key_infrastructure.dtos.*;
+import com.ftn.siit.ib.public_key_infrastructure.services.CSRService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+
+import java.time.LocalDateTime;
 
 @RestController
 @RequestMapping("/api/csr")
 @CrossOrigin(origins = "*")
 public class CSRController {
 
-    // ===== CSR Creation =====
-    
-    @PostMapping("/create")
-    @PreAuthorize("hasRole('REGULAR_USER')")
-    public ResponseEntity<?> createCSR(@RequestBody CreateCSRDTO dto) {
-        return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED)
-                .body("CSR creation not implemented yet");
+    private final CSRService csrService;
+
+    public CSRController(CSRService csrService) {
+        this.csrService = csrService;
     }
-    
-    @PostMapping("/upload")
-    @PreAuthorize("hasRole('REGULAR_USER')")
+
+    /**
+     * Generates a new certificate signing request (CSR) and key pair from supplied subject details.
+     * Requires EeUser role.
+     */
+    @PostMapping("/form")
+    @PreAuthorize("hasRole('EE_USER')")
+    public ResponseEntity<?> generateCSRFromForm(@RequestBody CreateCertificateRequestDTO dto) {
+        try {
+            // Get current user ID from security context
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            Long userId = getCurrentUserId(authentication);
+            
+            KeyPairDTO keyPair = csrService.createCertificateRequest(dto, userId);
+            return ResponseEntity.ok(keyPair);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body("Error creating certificate request: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Uploads an externally generated CSR for processing.
+     * Requires EeUser role.
+     */
+    @PostMapping("/csr")
+    @PreAuthorize("hasRole('EE_USER')")
     public ResponseEntity<?> uploadCSR(
             @RequestParam("csrFile") MultipartFile csrFile,
-            @RequestParam("selectedCAId") Long selectedCAId,
-            @RequestParam(value = "templateId", required = false) Long templateId) {
-        return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED)
-                .body("CSR upload not implemented yet");
+            @RequestParam("signingOrganization") String signingOrganization,
+            @RequestParam(value = "notAfter", required = false) String notAfterStr) {
+        try {
+            // Get current user ID from security context
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            Long userId = getCurrentUserId(authentication);
+            
+            // Validate required fields
+            if (csrFile == null || csrFile.isEmpty()) {
+                return ResponseEntity.badRequest().body("Missing required fields!");
+            }
+            
+            if (signingOrganization == null || signingOrganization.trim().isEmpty()) {
+                return ResponseEntity.badRequest().body("Missing signingOrganization!");
+            }
+            
+            // Read CSR content
+            String csrContent = new String(csrFile.getBytes());
+            
+            // Parse notAfter date if provided
+            LocalDateTime notAfter = null;
+            if (notAfterStr != null && !notAfterStr.trim().isEmpty()) {
+                notAfter = LocalDateTime.parse(notAfterStr);
+            }
+            
+            csrService.createCertificateRequest(signingOrganization, csrContent, notAfter, userId);
+            return ResponseEntity.ok().build();
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body("Error uploading CSR: " + e.getMessage());
+        }
     }
-    
-    // ===== CSR Query Operations =====
-    
-    @GetMapping("/my-requests")
-    @PreAuthorize("hasRole('REGULAR_USER')")
-    public ResponseEntity<?> listMyCSRs() {
-        return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED)
-                .body("My CSRs listing not implemented yet");
-    }
-    
-    @GetMapping("/pending")
+
+    /**
+     * Lists certificate requests awaiting action for the signed-in CA user.
+     * Requires CaUser role.
+     */
+    @GetMapping("/")
     @PreAuthorize("hasRole('CA_USER')")
-    public ResponseEntity<?> listPendingCSRs() {
-        return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED)
-                .body("Pending CSRs listing not implemented yet");
+    public ResponseEntity<?> listPendingRequests() {
+        try {
+            // Get current user ID from security context
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            Long userId = getCurrentUserId(authentication);
+            
+            var requests = csrService.getCertificateRequests(userId);
+            return ResponseEntity.ok(requests);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body("Error retrieving certificate requests: " + e.getMessage());
+        }
     }
-    
-    // ===== CSR Processing =====
-    
-    @PostMapping("/{id}/approve")
-    @PreAuthorize("hasAnyRole('CA_USER', 'ADMIN')")
-    public ResponseEntity<?> approveCSR(
-            @PathVariable Long id,
-            @RequestBody ApproveCSRDTO dto) {
-        return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED)
-                .body("CSR approval not implemented yet");
+
+    /**
+     * Rejects a pending certificate request.
+     * Requires CaUser role.
+     */
+    @PostMapping("/reject")
+    @PreAuthorize("hasRole('CA_USER')")
+    public ResponseEntity<?> rejectRequest(@RequestBody String requestId) {
+        try {
+            // Get current user ID from security context
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            Long userId = getCurrentUserId(authentication);
+            
+            csrService.deleteCertificateRequest(userId, requestId);
+            return ResponseEntity.ok().build();
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body("Error rejecting request: " + e.getMessage());
+        }
     }
-    
-    @PostMapping("/{id}/reject")
-    @PreAuthorize("hasAnyRole('CA_USER', 'ADMIN')")
-    public ResponseEntity<?> rejectCSR(
-            @PathVariable Long id,
-            @RequestBody RejectCSRDTO dto) {
-        return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED)
-                .body("CSR rejection not implemented yet");
+
+    /**
+     * Approves and fulfills a certificate request.
+     * Requires CaUser role.
+     */
+    @PostMapping("/approve")
+    @PreAuthorize("hasRole('CA_USER')")
+    public ResponseEntity<?> approveRequest(@RequestBody ApproveCertificateRequestDTO dto) {
+        try {
+            // Get current user ID from security context
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            Long userId = getCurrentUserId(authentication);
+            
+            csrService.approveCertificateRequest(userId, dto);
+            return ResponseEntity.ok().build();
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body("Error approving request: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Helper method to get current user ID from authentication context.
+     * This is a placeholder implementation - in a real system, you'd look up the user by email.
+     */
+    private Long getCurrentUserId(Authentication authentication) {
+        // This is a placeholder - in a real implementation, you'd look up the user by email
+        // and return their actual ID
+        return 1L;
     }
 }

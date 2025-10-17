@@ -4,6 +4,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.Size;
 import jakarta.validation.constraints.Pattern;
@@ -34,4 +35,7 @@ public class CreateCAUserDTO {
     @NotBlank(message = "Organization is required")
     @Size(max = 100, message = "Organization name must not exceed 100 characters")
     private String organization;
+    
+    @NotNull(message = "Initial signing certificate ID is required")
+    private Long initialSigningCertificateId;
 }
