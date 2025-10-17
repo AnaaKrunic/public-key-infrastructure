@@ -2,6 +2,9 @@ package com.ftn.siit.ib.public_key_infrastructure.controllers;
 
 import com.ftn.siit.ib.public_key_infrastructure.services.MFAService;
 import com.ftn.siit.ib.public_key_infrastructure.services.user.IUserService;
+
+import java.util.Map;
+
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -24,16 +27,25 @@ public class MFAController {
         userService.enableMfa(email, secret);
 
         String qrImage = mfaService.generateQrImage(email, secret);
-        return ResponseEntity.ok(qrImage); // front može prikazati kao <img src="{{qrImage}}">
+        return ResponseEntity.ok().body(Map.of(
+            "qrImage", qrImage,
+            "secretKey", secret
+        ));
     }
 
     @PostMapping("/verify")
     public ResponseEntity<?> verifyMfa(@RequestParam String email, @RequestParam String code) {
         boolean valid = userService.verifyMfaCode(email, code);
         if (valid) {
-            return ResponseEntity.ok("MFA verified successfully!");
+            return ResponseEntity.ok().body(Map.of("message", "MFA verified successfully!"));
         } else {
             return ResponseEntity.badRequest().body("Invalid MFA code.");
         }
+    }
+
+    @GetMapping("/status")
+    public ResponseEntity<?> getMfaStatus(@RequestParam String email) {
+        boolean mfaEnabled = userService.isMfaEnabled(email);
+        return ResponseEntity.ok().body(Map.of("mfaEnabled", mfaEnabled));
     }
 }

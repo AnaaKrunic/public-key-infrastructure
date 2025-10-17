@@ -136,4 +136,11 @@ public class UserService implements IUserService {
         return mfaService.verifyCode(user.getMfaSecret(), code);
     }
 
+    @Override
+    public boolean isMfaEnabled(String email) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        return user.isMfaEnabled();
+    }
+
 }

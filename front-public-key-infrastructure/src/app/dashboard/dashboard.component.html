@@ -1,0 +1,137 @@
+<div class="dashboard-container">
+  <div class="dashboard-card">
+    <div class="header">
+      <h1>Dashboard</h1>
+      <p>Dobrodošli u PKI sistem</p>
+    </div>
+
+    <div class="content">
+      <!-- User Info -->
+      <div class="user-info">
+        <h2>Informacije o korisniku</h2>
+        <div class="info-item">
+          <span class="label">Email:</span>
+          <span class="value">{{ userEmail }}</span>
+        </div>
+        <div class="info-item">
+          <span class="label">MFA Status:</span>
+          <span class="value" [class.enabled]="mfaEnabled" [class.disabled]="!mfaEnabled">
+            {{ mfaEnabled ? 'Omogućeno' : 'Onemogućeno' }}
+          </span>
+        </div>
+      </div>
+
+      <!-- MFA Setup Section -->
+      <div class="mfa-section">
+        <h2>Multi-Factor Authentication (MFA)</h2>
+        
+        <!-- MFA Not Enabled -->
+        <div *ngIf="!mfaEnabled" class="mfa-setup">
+          <div class="setup-info">
+            <p>Omogućite MFA za dodatnu bezbednost vašeg naloga.</p>
+            <p>MFA će zahtevati dodatni kod iz autentifikacione aplikacije prilikom prijave.</p>
+          </div>
+          
+          <button 
+            class="btn-primary" 
+            (click)="enableMfa()" 
+            [disabled]="isLoadingMfa"
+          >
+            <span *ngIf="!isLoadingMfa">Omogući MFA</span>
+            <span *ngIf="isLoadingMfa">Učitava se...</span>
+          </button>
+        </div>
+
+        <!-- MFA Setup Process -->
+        <div *ngIf="showMfaSetup" class="mfa-setup-process">
+          <div class="setup-steps">
+            <h3>Koraci za podešavanje MFA:</h3>
+            <ol>
+              <li>Instalirajte autentifikacionu aplikaciju (Google Authenticator, Authy, itd.)</li>
+              <li>Skenirajte QR kod ispod ili unesite tajni ključ ručno</li>
+              <li>Unesite kod iz aplikacije da potvrdite podešavanje</li>
+            </ol>
+          </div>
+
+          <!-- QR Code -->
+          <div *ngIf="qrCodeImage" class="qr-code-section">
+            <h4>QR Kod:</h4>
+            <div class="qr-code-container">
+              <img [src]="qrCodeImage" alt="MFA QR Code" class="qr-code-image">
+            </div>
+            <p class="qr-help">Skenirajte ovaj QR kod sa vašom autentifikacionom aplikacijom</p>
+          </div>
+
+          <!-- Manual Key -->
+          <div class="manual-key-section">
+            <h4>Ručno unesite tajni ključ:</h4>
+            <div class="key-container">
+              <input 
+                type="text" 
+                [value]="secretKey" 
+                readonly 
+                class="secret-key-input"
+                #secretKeyInput
+              >
+              <button 
+                class="btn-copy" 
+                (click)="copyToClipboard(secretKeyInput)"
+                title="Kopiraj ključ"
+              >
+                📋
+              </button>
+            </div>
+          </div>
+
+          <!-- Verification -->
+          <div class="verification-section">
+            <h4>Potvrdite podešavanje:</h4>
+            <div class="verification-form">
+              <input 
+                type="text" 
+                placeholder="Unesite 6-cifreni kod"
+                [(ngModel)]="verificationCode"
+                class="verification-input"
+                maxlength="6"
+              >
+              <button 
+                class="btn-verify" 
+                (click)="verifyMfaSetup()"
+                [disabled]="!verificationCode || verificationCode.length !== 6 || isLoadingVerification"
+              >
+                <span *ngIf="!isLoadingVerification">Potvrdi</span>
+                <span *ngIf="isLoadingVerification">Proverava...</span>
+              </button>
+            </div>
+            <div *ngIf="verificationError" class="verification-error">
+              {{ verificationError }}
+            </div>
+          </div>
+
+          <!-- Cancel Button -->
+          <div class="cancel-section">
+            <button class="btn-cancel" (click)="cancelMfaSetup()">
+              Otkaži podešavanje
+            </button>
+          </div>
+        </div>
+
+        <!-- MFA Enabled -->
+        <div *ngIf="mfaEnabled && !showMfaSetup" class="mfa-enabled">
+          <div class="enabled-info">
+            <div class="success-icon">✓</div>
+            <p>MFA je uspešno omogućeno za vaš nalog.</p>
+            <p>Prilikom sledeće prijave biće potreban dodatni kod iz autentifikacione aplikacije.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="actions">
+        <button class="btn-secondary" (click)="logout()">
+          Odjavi se
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
