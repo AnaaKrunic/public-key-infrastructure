@@ -186,6 +186,53 @@
   color: #38a169;
 }
 
+/* Breach Status Styles */
+.breach-status {
+  margin-top: 12px;
+}
+
+.breach-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: all 0.3s ease;
+}
+
+.breach-indicator.checking {
+  background: #fef5e7;
+  border: 1px solid #f6e05e;
+  color: #744210;
+}
+
+.breach-indicator.safe {
+  background: #c6f6d5;
+  border: 1px solid #9ae6b4;
+  color: #22543d;
+}
+
+.breach-indicator.unsafe {
+  background: #fed7d7;
+  border: 1px solid #feb2b2;
+  color: #742a2a;
+}
+
+.breach-icon {
+  font-size: 1rem;
+}
+
+.breach-message {
+  flex: 1;
+}
+
+.breach-count {
+  font-size: 0.75rem;
+  opacity: 0.8;
+}
+
 .submit-btn {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;

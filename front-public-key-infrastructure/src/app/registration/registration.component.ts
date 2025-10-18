@@ -3,6 +3,7 @@ import { CommonModule, isPlatformBrowser } from '@angular/common';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { AuthService, UserRegistrationDTO } from '../services/auth.service';
+import { PasswordBreachService, PasswordBreachResponse } from '../services/password-breach.service';
 
 @Component({
   selector: 'app-registration',
@@ -30,15 +31,23 @@ export class RegistrationComponent {
     special: false
   };
 
+  breachStatus = {
+    isChecking: false,
+    isSafe: true,
+    breachCount: 0,
+    message: ''
+  };
+
   constructor(
     private fb: FormBuilder,
     private authService: AuthService,
     private router: Router,
+    private passwordBreachService: PasswordBreachService,
     @Inject(PLATFORM_ID) private platformId: Object
   ) {
     this.registrationForm = this.fb.group({
       email: ['', [Validators.required, Validators.email]],
-      password: ['', [Validators.required, Validators.minLength(8), this.passwordComplexityValidator]],
+      password: ['', [Validators.required, Validators.minLength(8), Validators.maxLength(64), this.passwordComplexityValidator]],
       confirmPassword: ['', [Validators.required]],
       firstName: ['', [Validators.required, Validators.minLength(2)]],
       lastName: ['', [Validators.required, Validators.minLength(2)]],
@@ -72,7 +81,8 @@ export class RegistrationComponent {
     const hasLowercase = /[a-z]/.test(password);
     const hasUppercase = /[A-Z]/.test(password);
     const hasNumber = /\d/.test(password);
-    const hasSpecial = /[@$!%*?&]/.test(password);
+    // OWASP compliant: all printable characters allowed as special characters
+    const hasSpecial = /[!"#$%&'()*+,\-./:;<=>?@\[\\\]^_`{|}~]/.test(password);
     
     if (!hasLowercase || !hasUppercase || !hasNumber || !hasSpecial) {
       return { passwordComplexity: true };
@@ -85,6 +95,21 @@ export class RegistrationComponent {
     const password = this.registrationForm.get('password')?.value;
     if (password && password.length > 0) {
       this.calculatePasswordStrength(password);
+      
+      // Check breach status if password meets basic requirements
+      if (this.passwordChecks.length && this.passwordChecks.lowercase && 
+          this.passwordChecks.uppercase && this.passwordChecks.number && 
+          this.passwordChecks.special) {
+        this.checkPasswordBreach(password);
+      } else {
+        // Reset breach status if password doesn't meet requirements
+        this.breachStatus = {
+          isChecking: false,
+          isSafe: true,
+          breachCount: 0,
+          message: ''
+        };
+      }
     } else {
       // Reset password strength when field is empty
       this.passwordStrength = { score: 0, label: '', color: '' };
@@ -95,6 +120,12 @@ export class RegistrationComponent {
         number: false,
         special: false
       };
+      this.breachStatus = {
+        isChecking: false,
+        isSafe: true,
+        breachCount: 0,
+        message: ''
+      };
     }
     // Trigger validation for confirm password
     this.registrationForm.get('confirmPassword')?.updateValueAndValidity();
@@ -103,11 +134,11 @@ export class RegistrationComponent {
   calculatePasswordStrength(password: string) {
     let score = 0;
     const checks = {
-      length: password.length >= 8,
+      length: password.length >= 8 && password.length <= 64,
       lowercase: /[a-z]/.test(password),
       uppercase: /[A-Z]/.test(password),
       number: /\d/.test(password),
-      special: /[@$!%*?&]/.test(password)
+      special: /[!"#$%&'()*+,\-./:;<=>?@\[\\\]^_`{|}~]/.test(password)
     };
 
     // Update password checks for template
@@ -126,6 +157,26 @@ export class RegistrationComponent {
     } else {
       this.passwordStrength = { score, label: 'Jaka', color: '#28a745' };
     }
+  }
+
+  checkPasswordBreach(password: string) {
+    this.breachStatus.isChecking = true;
+    this.breachStatus.message = 'Proveravam sigurnost lozinke...';
+
+    this.passwordBreachService.checkPasswordBreach(password).subscribe({
+      next: (response: PasswordBreachResponse) => {
+        this.breachStatus.isChecking = false;
+        this.breachStatus.isSafe = response.isSafe;
+        this.breachStatus.breachCount = response.breachCount;
+        this.breachStatus.message = response.message;
+      },
+      error: (error) => {
+        this.breachStatus.isChecking = false;
+        this.breachStatus.isSafe = true; // Pretpostavljamo sigurnost ako provera ne uspe
+        this.breachStatus.message = 'Nije moguće proveriti sigurnost lozinke';
+        console.error('Password breach check error:', error);
+      }
+    });
   }
 
   onSubmit() {
@@ -182,7 +233,10 @@ export class RegistrationComponent {
         return 'Lozinke se ne poklapaju.';
       }
       if (field.errors['passwordComplexity']) {
-        return 'Lozinka mora sadržavati najmanje jedno malo slovo, jedno veliko slovo, jedan broj i jedan specijalni karakter (@$!%*?&).';
+        return 'Lozinka mora imati između 8 i 64 karaktera i sadržavati najmanje jedno malo slovo, jedno veliko slovo, jedan broj i jedan specijalni karakter.';
+      }
+      if (field.errors['maxlength']) {
+        return `Lozinka ne sme biti duža od ${field.errors['maxlength'].requiredLength} karaktera.`;
       }
     }
     return '';
