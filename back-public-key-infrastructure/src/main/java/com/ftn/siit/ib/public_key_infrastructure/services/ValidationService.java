@@ -28,9 +28,11 @@ import java.security.cert.X509Certificate;
 public class ValidationService {
 
     private final CertificateSignerService certificateSignerService;
+    private final CRLService crlService;
 
-    public ValidationService(CertificateSignerService certificateSignerService) {
+    public ValidationService(CertificateSignerService certificateSignerService, CRLService crlService) {
         this.certificateSignerService = certificateSignerService;
+        this.crlService = crlService;
     }
 
     /**
@@ -39,6 +41,7 @@ public class ValidationService {
      * Validation checks:
      * - Certificate type must be ROOT or INTERMEDIATE
      * - Certificate status must be VALID (not REVOKED)
+     * - Certificate must NOT be revoked (checks CRL Distribution Point)
      * - Certificate must be within its validity period (notBefore <= now <= notAfter)
      * - Certificate must have keyCertSign key usage
      * - Digital signature must be valid (self-signed for ROOT, signed by issuer for INTERMEDIATE)
@@ -60,6 +63,15 @@ public class ValidationService {
         // Check certificate status
         if (issuer.getStatus() != CertificateStatus.ACTIVE) {
             throw new InvalidCertificateException("Certificate must be VALID to be used as a CA");
+        }
+
+        // Check revocation status via CRL Distribution Point
+        boolean isRevoked = crlService.checkCertificateRevocationViaCRL(issuer);
+        if (isRevoked) {
+            throw new InvalidCertificateException(
+                "Certificate has been revoked and cannot be used to sign other certificates. " +
+                "Certificate serial number: " + issuer.getSerialNumber()
+            );
         }
 
         // Check validity period

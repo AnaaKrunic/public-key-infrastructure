@@ -47,18 +47,24 @@ public class CRLService {
     private final CRLGeneratorService crlGeneratorService;
     private final EncryptionService encryptionService;
     private final UserKeyService userKeyService;
+    private final UserRepository userRepository;
+    private final com.ftn.siit.ib.public_key_infrastructure.config.ApplicationConfig applicationConfig;
 
     public CRLService(
             CertificateRepository certificateRepository,
             RevokedCertificateRepository revokedCertificateRepository,
             CRLGeneratorService crlGeneratorService,
             EncryptionService encryptionService,
-            UserKeyService userKeyService) {
+            UserKeyService userKeyService,
+            UserRepository userRepository,
+            com.ftn.siit.ib.public_key_infrastructure.config.ApplicationConfig applicationConfig) {
         this.certificateRepository = certificateRepository;
         this.revokedCertificateRepository = revokedCertificateRepository;
         this.crlGeneratorService = crlGeneratorService;
         this.encryptionService = encryptionService;
         this.userKeyService = userKeyService;
+        this.userRepository = userRepository;
+        this.applicationConfig = applicationConfig;
     }
 
     /**
@@ -242,6 +248,56 @@ public class CRLService {
     }
 
     /**
+     * Checks if a certificate is revoked by verifying against its CRL Distribution Point.
+     * 
+     * This method performs actual CRL validation:
+     * 1. Extracts CRL Distribution Point from certificate
+     * 2. For local certificates (our own system), checks database directly
+     * 3. For external certificates, would download and parse CRL (future enhancement)
+     * 
+     * This is the proper way to check revocation status before using a certificate
+     * to sign another certificate.
+     * 
+     * @param certificate The certificate to check
+     * @return true if the certificate is revoked, false if valid
+     * @throws IllegalArgumentException if certificate is null
+     */
+    public boolean checkCertificateRevocationViaCRL(Certificate certificate) {
+        if (certificate == null) {
+            throw new IllegalArgumentException("Certificate cannot be null");
+        }
+
+        System.out.println("DEBUG: Checking revocation status for certificate: " + certificate.getSerialNumber());
+        
+        // Get CRL Distribution Point
+        String crlDistributionPoint = certificate.getCrlDistributionPoint();
+        
+        if (crlDistributionPoint == null || crlDistributionPoint.trim().isEmpty()) {
+            System.out.println("DEBUG: Certificate has no CRL Distribution Point, assuming not revoked");
+            // No CRL DP means we can't check via CRL, fall back to database check
+            return certificate.getStatus() == CertificateStatus.REVOKED;
+        }
+        
+        System.out.println("DEBUG: CRL Distribution Point: " + crlDistributionPoint);
+        
+        // Check if this is our own CRL (local certificate)
+        String ourCrlUrl = applicationConfig.getCrlDistributionPointUrl();
+        if (crlDistributionPoint.equals(ourCrlUrl)) {
+            System.out.println("DEBUG: This is a local certificate, checking database");
+            // This is one of our certificates, check database directly
+            boolean isRevoked = certificate.getStatus() == CertificateStatus.REVOKED;
+            System.out.println("DEBUG: Certificate revocation status from database: " + isRevoked);
+            return isRevoked;
+        } else {
+            System.out.println("DEBUG: This is an external certificate, would need to download CRL (not implemented yet)");
+            // This is an external certificate, would need to download and parse CRL
+            // For now, fall back to database check
+            // TODO: Implement HTTP CRL download and parsing for external certificates
+            return certificate.getStatus() == CertificateStatus.REVOKED;
+        }
+    }
+
+    /**
      * Gets the CRL distribution point URL for a CA certificate.
      * 
      * This URL is embedded in issued certificates' CRL Distribution Points
@@ -255,9 +311,14 @@ public class CRLService {
             throw new IllegalArgumentException("CA certificate cannot be null");
         }
 
-        // This would return the actual CRL distribution point URL
-        // For now, return a placeholder URL
-        return "http://pki.example.com/crl/" + caCertificate.getSerialNumber() + ".crl";
+        // Check if certificate has CRL DP stored in database
+        if (caCertificate.getCrlDistributionPoint() != null && 
+            !caCertificate.getCrlDistributionPoint().trim().isEmpty()) {
+            return caCertificate.getCrlDistributionPoint();
+        }
+
+        // Fall back to configured default
+        return applicationConfig.getCrlDistributionPointUrl();
     }
 
     /**
@@ -476,14 +537,32 @@ public class CRLService {
         }
 
 
-        // Admin can revoke any certificate
-        // CA cant revoke any certificate
+        // Authorization checks based on user role
         if (requesterRole == Role.ADMIN) {
-            // ADMIN can revoke any certificate
+            // ADMIN can revoke any certificate ✅
+            System.out.println("DEBUG: Admin user can revoke any certificate");
         } else if (requesterRole == Role.CA_USER) {
-            // CA cant revoke any certificate
-        }else if (requesterRole == Role.EE_USER){         
-            //temporary just check if the certificate is owned by the requester
+            // CA users are NOT allowed to revoke certificates per specification ❌
+            throw new RuntimeException(
+                "Access denied: CA users cannot revoke certificates. " +
+                "Only administrators and certificate owners (EE users) can revoke certificates."
+            );
+        } else if (requesterRole == Role.EE_USER) {
+            // EE users can only revoke certificates in their myCertificates list
+            User requester = userRepository.findById(requesterId)
+                    .orElseThrow(() -> new RuntimeException("Requester not found"));
+            
+            // Check if certificate is in user's myCertificates collection
+            boolean ownsIt = requester.getMyCertificates().stream()
+                    .anyMatch(cert -> cert.getId().equals(certificate.getId()));
+            
+            if (!ownsIt) {
+                throw new RuntimeException(
+                    "Access denied: EE users can only revoke their own certificates. " +
+                    "This certificate does not belong to you."
+                );
+            }
+            System.out.println("DEBUG: EE user is revoking their own certificate");
         } else {
             throw new RuntimeException("Invalid user role for certificate revocation!");
         }

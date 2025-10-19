@@ -54,6 +54,7 @@ public class CertificateService {
     private final CRLService crlService;
     private final MasterKeyService masterKeyService;
     private final UserKeyService userKeyService;
+    private final com.ftn.siit.ib.public_key_infrastructure.config.ApplicationConfig applicationConfig;
 
     public CertificateService(
             CertificateRepository certificateRepository,
@@ -66,7 +67,8 @@ public class CertificateService {
             KeystoreService keystoreService,
             CRLService crlService,
             MasterKeyService masterKeyService,
-            UserKeyService userKeyService) {
+            UserKeyService userKeyService,
+            com.ftn.siit.ib.public_key_infrastructure.config.ApplicationConfig applicationConfig) {
         this.certificateRepository = certificateRepository;
         this.userRepository = userRepository;
         this.validationService = validationService;
@@ -78,6 +80,7 @@ public class CertificateService {
         this.crlService = crlService;
         this.masterKeyService = masterKeyService;
         this.userKeyService = userKeyService;
+        this.applicationConfig = applicationConfig;
     }
 
     /**
@@ -175,6 +178,7 @@ public class CertificateService {
         }
         certificateEntity.setKeyUsage(String.join(",", dto.getKeyUsage()));
         certificateEntity.setPathLength(dto.getBasicConstraints().getPathLength());
+        certificateEntity.setCrlDistributionPoint(applicationConfig.getCrlDistributionPointUrl());
         // Owner removed - using many-to-many relationship now
         certificateEntity.setSignedBy(admin);
         certificateEntity.setSigningCertificate(null);
@@ -322,6 +326,7 @@ public class CertificateService {
         }
         certificateEntity.setKeyUsage(String.join(",", dto.getKeyUsage()));
         certificateEntity.setPathLength(dto.getBasicConstraints().getPathLength());
+        certificateEntity.setCrlDistributionPoint(applicationConfig.getCrlDistributionPointUrl());
         // Owner removed - using many-to-many relationship now
         certificateEntity.setIssuerCertificate(issuer);
         certificateEntity.setSignedBy(user);
@@ -504,6 +509,7 @@ public class CertificateService {
         certificateEntity.setKeyUsage(String.join(",", dto.getKeyUsage()));
         certificateEntity.setExtendedKeyUsage(dto.getExtendedKeyUsage() != null ? String.join(",", dto.getExtendedKeyUsage()) : null);
         certificateEntity.setSubjectAlternativeNames(dto.getSubjectAlternativeNames() != null ? String.join(",", dto.getSubjectAlternativeNames()) : null);
+        certificateEntity.setCrlDistributionPoint(applicationConfig.getCrlDistributionPointUrl());
         // Owner removed - using many-to-many relationship now
         certificateEntity.setIssuerCertificate(issuer);
         certificateEntity.setSignedBy(requester);
