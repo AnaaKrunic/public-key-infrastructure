@@ -19,7 +19,7 @@ export interface LoginDTO {
   providedIn: 'root'
 })
 export class AuthService {
-  private readonly API_BASE_URL = 'http://localhost:8080/api';
+  private readonly API_BASE_URL = 'https://localhost:8443/api';
   private readonly AUTH_STORAGE_KEY = 'pki_auth_state';
 
   private authStateSubject = new BehaviorSubject<AuthState | null>(null);
