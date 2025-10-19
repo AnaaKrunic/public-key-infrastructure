@@ -1,7 +1,6 @@
 package com.ftn.siit.ib.public_key_infrastructure.controllers;
 
 import com.ftn.siit.ib.public_key_infrastructure.dtos.AssignRoleDTO;
-import com.ftn.siit.ib.public_key_infrastructure.entities.UserRole;
 import com.ftn.siit.ib.public_key_infrastructure.services.user.IUserService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
