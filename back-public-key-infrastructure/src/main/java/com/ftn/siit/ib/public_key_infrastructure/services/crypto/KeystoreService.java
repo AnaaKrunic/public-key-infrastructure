@@ -226,23 +226,31 @@ public class KeystoreService {
         }
 
         try {
+            System.out.println("DEBUG: Creating PKCS12 keystore with " + certificateChain.size() + " certificates");
             KeyStore keystore = KeyStore.getInstance(KEYSTORE_TYPE);
             keystore.load(null, null);
 
             // Convert list to array
             X509Certificate[] certArray = certificateChain.toArray(new X509Certificate[0]);
+            System.out.println("DEBUG: Converted certificate chain to array with " + certArray.length + " certificates");
 
             // Add private key with certificate chain
             keystore.setKeyEntry(privateKeyAlias, privateKey, password.toCharArray(), certArray);
+            System.out.println("DEBUG: Added private key to keystore");
 
             // Add the first certificate (end-entity) as the main certificate
             keystore.setCertificateEntry(certificateAlias, certificateChain.get(0));
+            System.out.println("DEBUG: Added certificate to keystore");
 
             // Convert to byte array
             ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
             keystore.store(outputStream, password.toCharArray());
-            return outputStream.toByteArray();
+            byte[] result = outputStream.toByteArray();
+            System.out.println("DEBUG: Keystore stored successfully, size: " + result.length + " bytes");
+            return result;
         } catch (Exception e) {
+            System.err.println("DEBUG: Error creating PKCS12 keystore: " + e.getMessage());
+            e.printStackTrace();
             throw new RuntimeException("Failed to create PKCS12 keystore", e);
         }
     }

@@ -1,12 +1,19 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { BehaviorSubject, Observable, of } from 'rxjs';
-import { map, catchError, tap } from 'rxjs/operators';
+import { map, catchError, tap, switchMap } from 'rxjs/operators';
 import { LoginRequest } from '../../models/LoginRequest';
 import { RegisterRequest } from '../../models/RegisterRequest';
 import { BasicUser } from '../../models/BasicUser';
 import { AuthState } from '../../models/AuthState';
 import { Role } from '../../models/Role';
+
+// Export LoginDTO for backward compatibility
+export interface LoginDTO {
+  email: string;
+  password: string;
+  mfaCode?: string;
+}
 
 @Injectable({
   providedIn: 'root'
@@ -37,9 +44,26 @@ export class AuthService {
       try {
         const authState: AuthState = JSON.parse(storedState);
         this.authStateSubject.next(authState);
-        this.userSubject.next(authState.user);
-        this.roleSubject.next(authState.user?.role || null);
         this.isLoggedInSubject.next(!!authState.accessToken);
+        
+        // If we have a token but no user data, fetch it
+        if (authState.accessToken && !authState.user) {
+          console.log('initializeAuthState: Token found but no user data, fetching user...');
+          this.getCurrentUser().subscribe({
+            next: (user) => {
+              console.log('initializeAuthState: User fetched:', user);
+              this.userSubject.next(user);
+              this.roleSubject.next(user.role);
+            },
+            error: (error) => {
+              console.error('initializeAuthState: Error fetching user:', error);
+              this.clearAuthState();
+            }
+          });
+        } else {
+          this.userSubject.next(authState.user);
+          this.roleSubject.next(authState.user?.role || null);
+        }
       } catch (error) {
         console.error('Error parsing stored auth state:', error);
         this.clearAuthState();
@@ -47,10 +71,16 @@ export class AuthService {
     }
   }
 
-  login(loginRequest: LoginRequest): Observable<string> {
-    return this.http.post<string>(`${this.API_BASE_URL}/auth/login`, loginRequest)
+  login(loginRequest: LoginRequest): Observable<any> {
+    console.log('AuthService.login: Starting login process');
+    return this.http.post<any>(`${this.API_BASE_URL}/auth/login`, loginRequest)
       .pipe(
-        tap((token: string) => {
+        tap((response: any) => {
+          console.log('AuthService.login: Login response received:', response);
+          // Extract token from response object
+          const token = response.accessToken;
+          console.log('AuthService.login: Extracted token:', token);
+          
           // Store the token and create auth state
           const authState: AuthState = {
             accessToken: token,
@@ -60,15 +90,32 @@ export class AuthService {
             user: null // Will be fetched separately
           };
           
+          console.log('AuthService.login: Setting auth state:', authState);
           this.authStateSubject.next(authState);
           this.isLoggedInSubject.next(true);
           localStorage.setItem(this.AUTH_STORAGE_KEY, JSON.stringify(authState));
-          
-          // Fetch user details
-          this.getCurrentUser().subscribe();
+          console.log('AuthService.login: Auth state set, fetching user details...');
+        }),
+        switchMap((response: any) => {
+          console.log('AuthService.login: Starting getCurrentUser call');
+          // Fetch user details and return the user data
+          return this.getCurrentUser().pipe(
+            tap((user) => {
+              console.log('AuthService.login: User fetched successfully:', user);
+            }),
+            map((user) => {
+              console.log('AuthService.login: Returning response with user:', { ...response, user });
+              return { ...response, user };
+            }),
+            catchError((error) => {
+              console.error('AuthService.login: Error in getCurrentUser:', error);
+              // Return the response even if getCurrentUser fails
+              return of({ ...response, user: null });
+            })
+          );
         }),
         catchError(error => {
-          console.error('Login error:', error);
+          console.error('AuthService.login: Login error:', error);
           throw error;
         })
       );
@@ -85,15 +132,24 @@ export class AuthService {
   }
 
   getCurrentUser(): Observable<BasicUser> {
+    console.log('getCurrentUser: Making request to /api/users/me');
+    console.log('getCurrentUser: Current token:', this.getToken());
     return this.http.get<any>(`${this.API_BASE_URL}/users/me`)
       .pipe(
         map(response => {
+          console.log('getCurrentUser response:', response);
+          console.log('Organization from backend:', response.organization);
           const user: BasicUser = {
             id: response.id.toString(),
             role: response.role,
             name: response.firstName,
-            surname: response.lastName
+            surname: response.lastName,
+            email: response.email,
+            organization: response.organization
           };
+          
+          console.log('Created user object:', user);
+          console.log('User organization field:', user.organization);
           
           this.userSubject.next(user);
           this.roleSubject.next(user.role);
@@ -107,12 +163,14 @@ export class AuthService {
             };
             this.authStateSubject.next(updatedState);
             localStorage.setItem(this.AUTH_STORAGE_KEY, JSON.stringify(updatedState));
+            console.log('Updated auth state:', updatedState);
           }
           
           return user;
         }),
         catchError(error => {
           console.error('Error fetching current user:', error);
+          console.error('Error details:', error.status, error.statusText, error.error);
           throw error;
         })
       );
@@ -139,7 +197,11 @@ export class AuthService {
   }
 
   get isLoggedIn(): boolean {
-    return this.isLoggedInSubject.value;
+    const isLoggedIn = this.isLoggedInSubject.value;
+    console.log('AuthService.isLoggedIn getter called, returning:', isLoggedIn);
+    console.log('AuthService.isLoggedIn - authState:', this.authStateSubject.value);
+    console.log('AuthService.isLoggedIn - user:', this.userSubject.value);
+    return isLoggedIn;
   }
 
   get userRole(): Role | null {

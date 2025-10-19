@@ -1,2 +1,10 @@
-export type CertificateStatus = 'ACTIVE' | 'DORMANT' | 'EXPIRED' | 'REVOKED' | 'INVALID' | 'CIRCULAR' | 'PROHIBITED';
+export enum CertificateStatus {
+  ACTIVE = 'ACTIVE',
+  DORMANT = 'DORMANT',
+  EXPIRED = 'EXPIRED',
+  REVOKED = 'REVOKED',
+  INVALID = 'INVALID',
+  CIRCULAR = 'CIRCULAR',
+  PROHIBITED = 'PROHIBITED'
+}
 

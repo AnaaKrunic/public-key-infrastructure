@@ -1,1 +1,168 @@
-<p>registration works!</p>
+<div class="registration-container">
+  <div class="registration-card">
+    <div class="header">
+      <h1>Registracija</h1>
+      <p>Kreirajte svoj nalog za pristup sistemu</p>
+    </div>
+
+    <form [formGroup]="registrationForm" (ngSubmit)="onSubmit()" class="registration-form">
+      <!-- Email Field -->
+      <div class="form-group">
+        <label for="email">Email adresa *</label>
+        <input
+          type="email"
+          id="email"
+          formControlName="email"
+          placeholder="Unesite email adresu"
+          class="form-control"
+          [class.error]="getFieldError('email')"
+        />
+        <div class="error-message" *ngIf="getFieldError('email')">
+          {{ getFieldError('email') }}
+        </div>
+      </div>
+
+      <!-- Password Field -->
+      <div class="form-group">
+        <label for="password">Lozinka *</label>
+        <input
+          type="password"
+          id="password"
+          formControlName="password"
+          placeholder="Unesite lozinku"
+          class="form-control"
+          [class.error]="getFieldError('password')"
+          (input)="onPasswordChange()"
+        />
+        <div class="error-message" *ngIf="getFieldError('password')">
+          {{ getFieldError('password') }}
+        </div>
+        
+        <!-- Password Strength Indicator -->
+        <div class="password-strength" *ngIf="registrationForm.get('password')?.value">
+          <div class="strength-bar">
+            <div 
+              class="strength-fill" 
+              [style.width.%]="(passwordStrength.score / 5) * 100"
+              [style.background-color]="passwordStrength.color"
+            ></div>
+          </div>
+          <span class="strength-label" [style.color]="passwordStrength.color">
+            Jačina lozinke: {{ passwordStrength.label }}
+          </span>
+        </div>
+        
+        <!-- Password Requirements -->
+        <div class="password-requirements">
+          <p>Lozinka mora sadržavati:</p>
+          <ul>
+            <li [class.valid]="passwordChecks.length">
+              Najmanje 8 karaktera
+            </li>
+            <li [class.valid]="passwordChecks.lowercase">
+              Malo slovo (a-z)
+            </li>
+            <li [class.valid]="passwordChecks.uppercase">
+              Veliko slovo (A-Z)
+            </li>
+            <li [class.valid]="passwordChecks.number">
+              Broj (0-9)
+            </li>
+            <li [class.valid]="passwordChecks.special">
+              Specijalni karakter (&#64;$!%*?&)
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Confirm Password Field -->
+      <div class="form-group">
+        <label for="confirmPassword">Potvrda lozinke *</label>
+        <input
+          type="password"
+          id="confirmPassword"
+          formControlName="confirmPassword"
+          placeholder="Potvrdite lozinku"
+          class="form-control"
+          [class.error]="getFieldError('confirmPassword')"
+        />
+        <div class="error-message" *ngIf="getFieldError('confirmPassword')">
+          {{ getFieldError('confirmPassword') }}
+        </div>
+      </div>
+
+      <!-- First Name Field -->
+      <div class="form-group">
+        <label for="firstName">Ime *</label>
+        <input
+          type="text"
+          id="firstName"
+          formControlName="firstName"
+          placeholder="Unesite ime"
+          class="form-control"
+          [class.error]="getFieldError('firstName')"
+        />
+        <div class="error-message" *ngIf="getFieldError('firstName')">
+          {{ getFieldError('firstName') }}
+        </div>
+      </div>
+
+      <!-- Last Name Field -->
+      <div class="form-group">
+        <label for="lastName">Prezime *</label>
+        <input
+          type="text"
+          id="lastName"
+          formControlName="lastName"
+          placeholder="Unesite prezime"
+          class="form-control"
+          [class.error]="getFieldError('lastName')"
+        />
+        <div class="error-message" *ngIf="getFieldError('lastName')">
+          {{ getFieldError('lastName') }}
+        </div>
+      </div>
+
+      <!-- Organization Field -->
+      <div class="form-group">
+        <label for="organization">Organizacija *</label>
+        <input
+          type="text"
+          id="organization"
+          formControlName="organization"
+          placeholder="Unesite naziv organizacije"
+          class="form-control"
+          [class.error]="getFieldError('organization')"
+        />
+        <div class="error-message" *ngIf="getFieldError('organization')">
+          {{ getFieldError('organization') }}
+        </div>
+      </div>
+
+      <!-- Error Message -->
+      <div class="error-message global-error" *ngIf="errorMessage">
+        {{ errorMessage }}
+      </div>
+
+      <!-- Success Message -->
+      <div class="success-message" *ngIf="successMessage">
+        {{ successMessage }}
+      </div>
+
+      <!-- Submit Button -->
+      <button
+        type="submit"
+        class="submit-btn"
+        [disabled]="isLoading || !registrationForm.valid"
+      >
+        <span *ngIf="!isLoading">Registruj se</span>
+        <span *ngIf="isLoading">Registracija u toku...</span>
+      </button>
+    </form>
+
+    <!-- Login Link -->
+    <div class="login-link">
+      <p>Već imate nalog? <a (click)="goToLogin()" class="link">Prijavite se</a></p>
+    </div>
+  </div>
+</div>

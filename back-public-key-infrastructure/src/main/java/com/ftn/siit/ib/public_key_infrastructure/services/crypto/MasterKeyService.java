@@ -57,10 +57,13 @@ public class MasterKeyService {
     @Cacheable(value = "masterKey", unless = "#result == null")
     public byte[] getMasterKey() {
         try {
+            System.out.println("DEBUG: Getting master key...");
             MasterKey masterKeyEntity = masterKeyRepository.findActiveMasterKey()
                 .orElseThrow(() -> new SecurityException("No active master key found"));
             
+            System.out.println("DEBUG: Found master key entity with ID: " + masterKeyEntity.getId());
             byte[] serverKey = getServerKey();
+            System.out.println("DEBUG: Retrieved server key, length: " + serverKey.length);
             
             // Decrypt master key using server key
             EncryptionService.EncryptedData encryptedData = new EncryptionService.EncryptedData(
@@ -69,9 +72,14 @@ public class MasterKeyService {
                 Base64.getDecoder().decode(masterKeyEntity.getEncryptionTag())
             );
             
+            System.out.println("DEBUG: Created encrypted data object for master key decryption");
             // For master key, we need to decrypt the raw bytes, not a PrivateKey
-            return decryptMasterKeyBytes(encryptedData, serverKey);
+            byte[] decryptedMasterKey = decryptMasterKeyBytes(encryptedData, serverKey);
+            System.out.println("DEBUG: Successfully decrypted master key, length: " + decryptedMasterKey.length);
+            return decryptedMasterKey;
         } catch (Exception e) {
+            System.err.println("DEBUG: Failed to retrieve master key: " + e.getMessage());
+            e.printStackTrace();
             throw new SecurityException("Failed to retrieve master key", e);
         }
     }

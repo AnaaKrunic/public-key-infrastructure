@@ -49,7 +49,7 @@ import { Certificate } from '../../../models/Certificate';
             <tr *ngFor="let user of caUsers">
               <td>{{ user.firstName }} {{ user.lastName }}</td>
               <td>{{ user.email }}</td>
-              <td>{{ user.organization }}</td>
+              <td>{{ user.organization || 'N/A' }}</td>
               <td>{{ formatDate(user.minValidFrom) }}</td>
               <td>{{ formatDate(user.maxValidUntil) }}</td>
               <td>
@@ -338,8 +338,9 @@ export class CaUserManagementComponent implements OnInit {
     this.loading = true;
     this.error = null;
 
-    this.usersService.getAllCaUsers().subscribe({
+    this.usersService.getValidCaUsers().subscribe({
       next: (users) => {
+        console.log('DEBUG: Received CA users data:', users);
         this.caUsers = users;
         this.loading = false;
       },
@@ -451,6 +452,13 @@ export class CaUserManagementComponent implements OnInit {
 
   formatDate(dateString?: string): string {
     if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString();
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return 'N/A';
+      return date.toLocaleDateString();
+    } catch (error) {
+      console.error('Error formatting date:', dateString, error);
+      return 'N/A';
+    }
   }
 }

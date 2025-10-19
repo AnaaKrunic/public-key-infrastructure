@@ -48,24 +48,32 @@ public class UserKeyService {
     @Cacheable(value = "userKey", key = "#userId", unless = "#result == null")
     public byte[] getUserKey(Long userId) {
         try {
+            System.out.println("DEBUG: Getting user key for user ID: " + userId);
             Optional<UserKey> userKeyEntity = userKeyRepository.findActiveUserKeyByUserId(userId);
             
             if (userKeyEntity.isPresent()) {
+                System.out.println("DEBUG: Found existing user key for user " + userId);
                 // Decrypt existing user key
                 UserKey uk = userKeyEntity.get();
                 byte[] masterKey = masterKeyService.getMasterKey();
+                System.out.println("DEBUG: Retrieved master key for user key decryption, length: " + masterKey.length);
                 
-                return decryptUserKeyBytes(
+                byte[] decryptedUserKey = decryptUserKeyBytes(
                     Base64.getDecoder().decode(uk.getEncryptedUserKey()),
                     Base64.getDecoder().decode(uk.getEncryptionIV()),
                     Base64.getDecoder().decode(uk.getEncryptionTag()),
                     masterKey
                 );
+                System.out.println("DEBUG: Successfully decrypted user key for user " + userId + ", length: " + decryptedUserKey.length);
+                return decryptedUserKey;
             } else {
+                System.out.println("DEBUG: No existing user key found for user " + userId + ", creating new one");
                 // Create new user key
                 return createUserKey(userId);
             }
         } catch (Exception e) {
+            System.err.println("DEBUG: Failed to retrieve user key for user " + userId + ": " + e.getMessage());
+            e.printStackTrace();
             throw new SecurityException("Failed to retrieve user key for user " + userId, e);
         }
     }
@@ -196,6 +204,9 @@ public class UserKeyService {
      */
     private byte[] decryptUserKeyBytes(byte[] encryptedData, byte[] iv, byte[] tag, byte[] masterKey) {
         try {
+            System.out.println("DEBUG: Decrypting user key bytes with encrypted data length: " + encryptedData.length + 
+                             ", IV length: " + iv.length + ", tag length: " + tag.length + ", master key length: " + masterKey.length);
+            
             javax.crypto.Cipher cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding");
             javax.crypto.spec.SecretKeySpec secretKey = new javax.crypto.spec.SecretKeySpec(masterKey, "AES");
             javax.crypto.spec.GCMParameterSpec gcmSpec = new javax.crypto.spec.GCMParameterSpec(128, iv);
@@ -206,8 +217,13 @@ public class UserKeyService {
             System.arraycopy(encryptedData, 0, ciphertextWithTag, 0, encryptedData.length);
             System.arraycopy(tag, 0, ciphertextWithTag, encryptedData.length, tag.length);
             
-            return cipher.doFinal(ciphertextWithTag);
+            System.out.println("DEBUG: Combined ciphertext with tag, total length: " + ciphertextWithTag.length);
+            byte[] decryptedBytes = cipher.doFinal(ciphertextWithTag);
+            System.out.println("DEBUG: Successfully decrypted user key bytes, length: " + decryptedBytes.length);
+            return decryptedBytes;
         } catch (Exception e) {
+            System.err.println("DEBUG: Failed to decrypt user key bytes: " + e.getMessage());
+            e.printStackTrace();
             throw new SecurityException("Failed to decrypt user key", e);
         }
     }

@@ -1,2 +1,6 @@
-export type CertificateType = 'ROOT' | 'INTERMEDIATE' | 'END_ENTITY';
+export enum CertificateType {
+  ROOT = 'ROOT',
+  INTERMEDIATE = 'INTERMEDIATE',
+  END_ENTITY = 'END_ENTITY'
+}
 

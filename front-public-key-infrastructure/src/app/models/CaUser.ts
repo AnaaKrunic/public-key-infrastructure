@@ -3,7 +3,7 @@ export interface CaUser {
   email: string;
   firstName: string;
   lastName: string;
-  organization: string;
+  organization?: string; // Backend returns organization as string, not object
   minValidFrom?: string;
   maxValidUntil?: string;
 }

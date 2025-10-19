@@ -1,96 +1,119 @@
-import { Component, OnInit } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import { FormsModule } from '@angular/forms';
+import { Component, OnInit, inject } from '@angular/core';
+import { CommonModule, DatePipe, NgIf } from '@angular/common';
+import { MatTable, MatTableDataSource, MatHeaderRow, MatHeaderRowDef, MatRow, MatRowDef, MatHeaderCell, MatHeaderCellDef, MatCell, MatCellDef, MatColumnDef } from '@angular/material/table';
+import { MatIconButton } from '@angular/material/button';
+import { MatDialog, MatDialogRef } from '@angular/material/dialog';
+import { MatProgressSpinner } from '@angular/material/progress-spinner';
 import { CertificateRequestsService } from '../../../services/certificates/certificate-requests.service';
+import { DialogService } from '../../../services/dialog/dialog.service';
 import { CertificateRequest } from '../../../models/CertificateRequest';
+import { EditCertificateRequestDialogComponent } from './edit-certificate-request-dialog/edit-certificate-request-dialog.component';
 
 @Component({
   selector: 'app-certificate-requests',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [
+    CommonModule,
+    MatTable,
+    MatHeaderRow,
+    MatHeaderRowDef,
+    MatRow,
+    MatRowDef,
+    MatHeaderCell,
+    MatHeaderCellDef,
+    MatCell,
+    MatCellDef,
+    MatColumnDef,
+    MatIconButton,
+    MatProgressSpinner,
+    NgIf,
+    DatePipe
+  ],
   template: `
     <div class="container">
       <h1>Pending Certificate Requests</h1>
       
       <div *ngIf="loading" class="loading">
-        Loading certificate requests...
+        <mat-spinner></mat-spinner>
       </div>
 
       <div *ngIf="error" class="error">
         {{ error }}
       </div>
 
-      <div *ngIf="requests.length > 0" class="requests-table">
-        <table>
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Common Name</th>
-              <th>Organization</th>
-              <th>Email</th>
-              <th>Submitted On</th>
-              <th>Status</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr *ngFor="let request of requests">
-              <td>{{ request.id }}</td>
-              <td>{{ request.commonName }}</td>
-              <td>{{ request.organization }}</td>
-              <td>{{ request.email }}</td>
-              <td>{{ formatDate(request.submittedOn) }}</td>
-              <td>
-                <span [class]="'status-' + (request.status || 'pending').toLowerCase()">
-                  {{ request.status || 'PENDING' }}
-                </span>
-              </td>
-              <td>
-                <button (click)="approveRequest(request)" class="btn btn-sm btn-success">
+      <div *ngIf="!loading && !error" class="table-container">
+        <mat-table [dataSource]="requestsDataSource" class="requests-table">
+          <ng-container matColumnDef="subject">
+            <mat-header-cell *matHeaderCellDef>Subject (CN)</mat-header-cell>
+            <mat-cell *matCellDef="let request">
+              {{ request.subjectCN || request.commonName }}
+            </mat-cell>
+          </ng-container>
+
+          <ng-container matColumnDef="organization">
+            <mat-header-cell *matHeaderCellDef>Organization</mat-header-cell>
+            <mat-cell *matCellDef="let request">
+              {{ request.subjectO || request.organization }}
+            </mat-cell>
+          </ng-container>
+
+          <ng-container matColumnDef="organizationalUnit">
+            <mat-header-cell *matHeaderCellDef>Organization unit</mat-header-cell>
+            <mat-cell *matCellDef="let request">
+              {{ request.subjectOU || request.organizationalUnit }}
+            </mat-cell>
+          </ng-container>
+
+          <ng-container matColumnDef="submittedOn">
+            <mat-header-cell *matHeaderCellDef>Submitted on</mat-header-cell>
+            <mat-cell *matCellDef="let request">
+              {{ (request.createdAt || request.submittedOn) | date:'HH:mm:ss dd.MM.yyyy.' }}
+            </mat-cell>
+          </ng-container>
+
+          <ng-container matColumnDef="status">
+            <mat-header-cell *matHeaderCellDef>Status</mat-header-cell>
+            <mat-cell *matCellDef="let request">
+              <span [class]="'status-' + (request.status || 'PENDING').toLowerCase()">
+                {{ request.status || 'PENDING' }}
+              </span>
+            </mat-cell>
+          </ng-container>
+
+          <ng-container matColumnDef="actions">
+            <mat-header-cell *matHeaderCellDef>Actions</mat-header-cell>
+            <mat-cell *matCellDef="let request">
+              <div class="action-buttons">
+                <button 
+                  *ngIf="request.status === 'PENDING'"
+                  (click)="approveRequest(request)" 
+                  class="btn btn-sm btn-success"
+                  title="Approve Request">
                   Approve
                 </button>
-                <button (click)="rejectRequest(request)" class="btn btn-sm btn-danger">
+                <button 
+                  *ngIf="request.status === 'PENDING'"
+                  (click)="rejectRequest(request)" 
+                  class="btn btn-sm btn-danger"
+                  title="Reject Request">
                   Reject
                 </button>
-                <button (click)="viewDetails(request)" class="btn btn-sm btn-secondary">
+                <button 
+                  (click)="openEditCertificate(request)" 
+                  class="btn btn-sm btn-secondary"
+                  title="View/Edit Request">
                   Details
                 </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+              </div>
+            </mat-cell>
+          </ng-container>
 
-      <div *ngIf="!loading && !error && requests.length === 0" class="no-data">
-        No pending certificate requests found.
-      </div>
+          <mat-header-row *matHeaderRowDef="displayedColumns"></mat-header-row>
+          <mat-row *matRowDef="let row; columns: displayedColumns;"></mat-row>
+        </mat-table>
 
-      <!-- Approval Modal -->
-      <div *ngIf="showApprovalModal" class="modal-overlay" (click)="closeApprovalModal()">
-        <div class="modal" (click)="$event.stopPropagation()">
-          <h3>Approve Certificate Request</h3>
-          <form (ngSubmit)="confirmApproval()" #approvalForm="ngForm">
-            <div class="form-group">
-              <label for="validityDays">Validity Days *</label>
-              <input 
-                type="number" 
-                id="validityDays" 
-                name="validityDays" 
-                [(ngModel)]="approvalData.validityDays" 
-                required
-                min="1"
-                max="365"
-                class="form-control">
-            </div>
-            <div class="form-actions">
-              <button type="submit" [disabled]="!approvalForm.form.valid" class="btn btn-primary">
-                Approve
-              </button>
-              <button type="button" (click)="closeApprovalModal()" class="btn btn-secondary">
-                Cancel
-              </button>
-            </div>
-          </form>
+        <div *ngIf="requests.length === 0" class="no-data">
+          No pending certificate requests found.
         </div>
       </div>
     </div>
@@ -102,7 +125,14 @@ import { CertificateRequest } from '../../../models/CertificateRequest';
       margin: 0 auto;
     }
 
-    .loading, .error, .no-data {
+    .loading {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 40px;
+    }
+
+    .error, .no-data {
       text-align: center;
       padding: 20px;
       font-size: 16px;
@@ -112,63 +142,12 @@ import { CertificateRequest } from '../../../models/CertificateRequest';
       color: #dc3545;
     }
 
-    .requests-table {
+    .table-container {
       margin-top: 20px;
     }
 
-    table {
+    .requests-table {
       width: 100%;
-      border-collapse: collapse;
-      margin-top: 10px;
-    }
-
-    th, td {
-      padding: 12px;
-      text-align: left;
-      border-bottom: 1px solid #ddd;
-    }
-
-    th {
-      background-color: #f8f9fa;
-      font-weight: 600;
-    }
-
-    tr:hover {
-      background-color: #f5f5f5;
-    }
-
-    .btn {
-      padding: 6px 12px;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 12px;
-      margin-right: 5px;
-    }
-
-    .btn-sm {
-      padding: 4px 8px;
-      font-size: 11px;
-    }
-
-    .btn-success {
-      background-color: #28a745;
-      color: white;
-    }
-
-    .btn-danger {
-      background-color: #dc3545;
-      color: white;
-    }
-
-    .btn-secondary {
-      background-color: #6c757d;
-      color: white;
-    }
-
-    .btn-primary {
-      background-color: #007bff;
-      color: white;
     }
 
     .status-pending {
@@ -186,61 +165,79 @@ import { CertificateRequest } from '../../../models/CertificateRequest';
       font-weight: bold;
     }
 
-    .modal-overlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background-color: rgba(0, 0, 0, 0.5);
+    .no-data {
+      text-align: center;
+      padding: 40px;
+      color: #666;
+    }
+
+    /* Action buttons styling */
+    .action-buttons {
       display: flex;
-      justify-content: center;
-      align-items: center;
-      z-index: 1000;
+      gap: 5px;
+      flex-wrap: wrap;
     }
 
-    .modal {
-      background: white;
-      padding: 20px;
-      border-radius: 8px;
-      max-width: 500px;
-      width: 90%;
-    }
-
-    .form-group {
-      margin-bottom: 15px;
-    }
-
-    label {
-      display: block;
-      margin-bottom: 5px;
-      font-weight: 600;
-    }
-
-    .form-control {
-      width: 100%;
-      padding: 8px;
-      border: 1px solid #ddd;
+    .btn {
+      padding: 10px 20px;
+      border: none;
       border-radius: 4px;
+      cursor: pointer;
       font-size: 14px;
     }
 
-    .form-actions {
-      margin-top: 20px;
-      display: flex;
-      gap: 10px;
+    .btn-sm {
+      padding: 4px 8px;
+      font-size: 11px;
+      margin-right: 5px;
+    }
+
+    .btn-success {
+      background-color: #28a745;
+      color: white;
+    }
+
+    .btn-success:hover {
+      background-color: #218838;
+    }
+
+    .btn-danger {
+      background-color: #dc3545;
+      color: white;
+    }
+
+    .btn-danger:hover {
+      background-color: #c82333;
+    }
+
+    .btn-secondary {
+      background-color: #6c757d;
+      color: white;
+    }
+
+    .btn-secondary:hover {
+      background-color: #5a6268;
     }
   `]
 })
 export class CertificateRequestsComponent implements OnInit {
+  private certificateRequestsService = inject(CertificateRequestsService);
+  private dialog = inject(MatDialog);
+  private dialogService = inject(DialogService);
+
   requests: CertificateRequest[] = [];
+  requestsDataSource = new MatTableDataSource<CertificateRequest>();
   loading = false;
   error: string | null = null;
-  showApprovalModal = false;
-  selectedRequest: CertificateRequest | null = null;
-  approvalData = { validityDays: 30 };
 
-  constructor(private certificateRequestsService: CertificateRequestsService) {}
+  displayedColumns: string[] = [
+    'subject',
+    'organization',
+    'organizationalUnit',
+    'submittedOn',
+    'status',
+    'actions'
+  ];
 
   ngOnInit(): void {
     this.loadRequests();
@@ -251,8 +248,10 @@ export class CertificateRequestsComponent implements OnInit {
     this.error = null;
 
     this.certificateRequestsService.getPendingCertificateRequests().subscribe({
-      next: (reqs) => {
-        this.requests = reqs;
+      next: (response) => {
+        // Handle paginated response
+        this.requests = response.content || response;
+        this.requestsDataSource.data = this.requests;
         this.loading = false;
       },
       error: (err) => {
@@ -264,34 +263,26 @@ export class CertificateRequestsComponent implements OnInit {
   }
 
   approveRequest(request: CertificateRequest): void {
-    this.selectedRequest = request;
-    this.approvalData.validityDays = 30;
-    this.showApprovalModal = true;
-  }
-
-  confirmApproval(): void {
-    if (!this.selectedRequest) return;
-
-    this.certificateRequestsService.approveCertificateRequest(
-      this.selectedRequest.id,
-      this.approvalData.validityDays
-    ).subscribe({
-      next: () => {
-        this.closeApprovalModal();
-        this.loadRequests(); // Refresh the list
-      },
-      error: (err) => {
-        console.error('Error approving certificate request:', err);
-        alert('Failed to approve certificate request');
-      }
-    });
+    const commonName = request.subjectCN || request.commonName;
+    if (confirm(`Are you sure you want to approve certificate request for ${commonName}?`)) {
+      this.certificateRequestsService.approveCertificateRequest(request.id, 365).subscribe({
+        next: () => {
+          this.loadRequests(); // Reload the list
+        },
+        error: (err) => {
+          console.error('Error approving certificate request:', err);
+          alert('Failed to approve certificate request');
+        }
+      });
+    }
   }
 
   rejectRequest(request: CertificateRequest): void {
-    if (confirm(`Are you sure you want to reject certificate request ${request.id}?`)) {
+    const commonName = request.subjectCN || request.commonName;
+    if (confirm(`Are you sure you want to reject certificate request for ${commonName}?`)) {
       this.certificateRequestsService.rejectCertificateRequest(request.id).subscribe({
         next: () => {
-          this.loadRequests(); // Refresh the list
+          this.loadRequests(); // Reload the list
         },
         error: (err) => {
           console.error('Error rejecting certificate request:', err);
@@ -301,18 +292,23 @@ export class CertificateRequestsComponent implements OnInit {
     }
   }
 
-  viewDetails(request: CertificateRequest): void {
-    // TODO: Implement certificate request details modal
-    console.log('View details for request:', request);
-  }
+  openEditCertificate(request: CertificateRequest): void {
+    const dialogRef = this.dialog.open(EditCertificateRequestDialogComponent, {
+      width: '900px',
+      maxWidth: '90vw',
+      maxHeight: '90vh',
+      data: request,
+      hasBackdrop: true,
+      disableClose: false
+    });
 
-  closeApprovalModal(): void {
-    this.showApprovalModal = false;
-    this.selectedRequest = null;
-    this.approvalData.validityDays = 30;
-  }
-
-  formatDate(dateString: string): string {
-    return new Date(dateString).toLocaleDateString();
+    dialogRef.afterClosed().subscribe(result => {
+      // Trigger cleanup after dialog closes
+      setTimeout(() => this.dialogService.cleanupOverlays(), 100);
+      
+      if (result === 'reload') {
+        this.loadRequests();
+      }
+    });
   }
 }

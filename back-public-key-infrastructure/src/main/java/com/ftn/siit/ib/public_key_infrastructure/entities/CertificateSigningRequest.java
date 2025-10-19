@@ -63,6 +63,16 @@ public class CertificateSigningRequest {
     @Column(columnDefinition = "TEXT")
     private String requestedExtensions;  // JSON format: {"keyUsage": [...], "extendedKeyUsage": [...]}
     
+    // ===== Encrypted Private Key (for form-based CSR) =====
+    @Column(columnDefinition = "TEXT")
+    private String encryptedPrivateKey;  // Base64 encoded encrypted private key
+    
+    @Column(columnDefinition = "TEXT")
+    private String encryptionIV;  // Base64 encoded IV for decryption
+    
+    @Column(columnDefinition = "TEXT")
+    private String encryptionTag;  // Base64 encoded authentication tag
+    
     // ===== Processing Information =====
     private String rejectionReason;  // Reason if status = REJECTED
     

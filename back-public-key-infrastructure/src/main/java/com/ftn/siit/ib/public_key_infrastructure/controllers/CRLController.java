@@ -2,6 +2,8 @@ package com.ftn.siit.ib.public_key_infrastructure.controllers;
 
 import com.ftn.siit.ib.public_key_infrastructure.dtos.RevokeCertificateRequestDTO;
 import com.ftn.siit.ib.public_key_infrastructure.entities.Role;
+import com.ftn.siit.ib.public_key_infrastructure.entities.User;
+import com.ftn.siit.ib.public_key_infrastructure.repositories.UserRepository;
 import com.ftn.siit.ib.public_key_infrastructure.services.CRLService;
 import com.ftn.siit.ib.public_key_infrastructure.services.FileDownloadService;
 import org.springframework.http.HttpHeaders;
@@ -18,10 +20,12 @@ public class CRLController {
 
     private final CRLService crlService;
     private final FileDownloadService fileDownloadService;
+    private final UserRepository userRepository;
 
-    public CRLController(CRLService crlService, FileDownloadService fileDownloadService) {
+    public CRLController(CRLService crlService, FileDownloadService fileDownloadService, UserRepository userRepository) {
         this.crlService = crlService;
         this.fileDownloadService = fileDownloadService;
+        this.userRepository = userRepository;
     }
 
     /**
@@ -48,6 +52,7 @@ public class CRLController {
         try {
             // Get current user from security context
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            String userEmail = authentication.getName();
             
             // Get user role from authentication
             Role requesterRole = authentication.getAuthorities().stream()
@@ -61,9 +66,10 @@ public class CRLController {
                     .findFirst()
                     .orElse(Role.EE_USER);
 
-            // For now, we'll use a placeholder user ID since we don't have user lookup here
-            // In a real implementation, you'd look up the user by email
-            Long requesterId = 1L; // This should be replaced with actual user lookup
+            // Look up the actual user by email to get their ID
+            User requester = userRepository.findByEmail(userEmail)
+                    .orElseThrow(() -> new RuntimeException("User not found"));
+            Long requesterId = requester.getId();
 
             crlService.revokeCertificate(dto, requesterId, requesterRole);
             

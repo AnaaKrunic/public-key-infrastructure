@@ -13,8 +13,8 @@ import java.util.List;
 @AllArgsConstructor
 public class CreateCertificateRequestDTO {
     
-    @NotBlank(message = "Signing organization is required")
-    private String signingOrganization;
+    @NotBlank(message = "Signing certificate is required")
+    private String signingCertificate;
     
     @NotBlank(message = "Common name is required")
     private String commonName;

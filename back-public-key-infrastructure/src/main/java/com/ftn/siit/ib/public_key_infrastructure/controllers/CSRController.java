@@ -35,8 +35,8 @@ public class CSRController {
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
             Long userId = getCurrentUserId(authentication);
             
-            KeyPairDTO keyPair = csrService.createCertificateRequest(dto, userId);
-            return ResponseEntity.ok(keyPair);
+            CSRDTO csr = csrService.createFormBasedCSR(dto, userId);
+            return ResponseEntity.ok(csr);
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body("Error creating certificate request: " + e.getMessage());
@@ -44,14 +44,15 @@ public class CSRController {
     }
 
     /**
-     * Uploads an externally generated CSR for processing.
+     * Uploads an externally generated CSR and private key for processing.
      * Requires EeUser role.
      */
-    @PostMapping("/csr")
+    @PostMapping("/upload")
     @PreAuthorize("hasRole('EE_USER')")
     public ResponseEntity<?> uploadCSR(
             @RequestParam("csrFile") MultipartFile csrFile,
-            @RequestParam("signingOrganization") String signingOrganization,
+            @RequestParam("privateKeyFile") MultipartFile privateKeyFile,
+            @RequestParam("signingCertificate") String signingCertificate,
             @RequestParam(value = "notAfter", required = false) String notAfterStr) {
         try {
             // Get current user ID from security context
@@ -60,15 +61,20 @@ public class CSRController {
             
             // Validate required fields
             if (csrFile == null || csrFile.isEmpty()) {
-                return ResponseEntity.badRequest().body("Missing required fields!");
+                return ResponseEntity.badRequest().body("Missing CSR file!");
             }
             
-            if (signingOrganization == null || signingOrganization.trim().isEmpty()) {
-                return ResponseEntity.badRequest().body("Missing signingOrganization!");
+            if (privateKeyFile == null || privateKeyFile.isEmpty()) {
+                return ResponseEntity.badRequest().body("Missing private key file!");
             }
             
-            // Read CSR content
+            if (signingCertificate == null || signingCertificate.trim().isEmpty()) {
+                return ResponseEntity.badRequest().body("Missing signing certificate!");
+            }
+            
+            // Read file contents
             String csrContent = new String(csrFile.getBytes());
+            String privateKeyContent = new String(privateKeyFile.getBytes());
             
             // Parse notAfter date if provided
             LocalDateTime notAfter = null;
@@ -76,7 +82,7 @@ public class CSRController {
                 notAfter = LocalDateTime.parse(notAfterStr);
             }
             
-            csrService.createCertificateRequest(signingOrganization, csrContent, notAfter, userId);
+            csrService.uploadCSRWithPrivateKey(signingCertificate, csrContent, privateKeyContent, notAfter, userId);
             return ResponseEntity.ok().build();
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)

@@ -14,6 +14,7 @@ public interface IUserService {
     String login(LoginDTO dto);
     void enableMfa(String email, String secret);
     boolean verifyMfaCode(String email, String code);
+    boolean isMfaEnabled(String email);
     User findByEmail(String email);
     UserDTO getCurrentUser(String email);
     List<UserDTO> getAllCaUsers();

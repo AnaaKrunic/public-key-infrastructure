@@ -1,0 +1,16 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../ib-pki-master/back-end"
+		},
+		{
+			"path": "../ib-pki-master/front-end"
+		}
+	],
+	"settings": {
+		"java.debug.settings.onBuildFailureProceed": true
+	}
+}

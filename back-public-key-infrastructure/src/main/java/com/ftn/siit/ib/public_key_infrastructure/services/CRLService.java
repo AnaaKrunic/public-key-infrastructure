@@ -4,11 +4,15 @@ import com.ftn.siit.ib.public_key_infrastructure.entities.*;
 import com.ftn.siit.ib.public_key_infrastructure.exceptions.*;
 import com.ftn.siit.ib.public_key_infrastructure.repositories.CertificateRepository;
 import com.ftn.siit.ib.public_key_infrastructure.repositories.RevokedCertificateRepository;
+import com.ftn.siit.ib.public_key_infrastructure.repositories.UserRepository;
 import com.ftn.siit.ib.public_key_infrastructure.services.crypto.CRLGeneratorService;
 import com.ftn.siit.ib.public_key_infrastructure.services.crypto.EncryptionService;
+import com.ftn.siit.ib.public_key_infrastructure.services.crypto.UserKeyService;
 import com.ftn.siit.ib.public_key_infrastructure.dtos.RevokedCertificateResponseDTO;
 import com.ftn.siit.ib.public_key_infrastructure.dtos.RevokeCertificateRequestDTO;
+import com.ftn.siit.ib.public_key_infrastructure.dtos.CertificateDTO;
 import org.bouncycastle.cert.X509CRLHolder;
+import org.hibernate.Hibernate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -42,16 +46,19 @@ public class CRLService {
     private final RevokedCertificateRepository revokedCertificateRepository;
     private final CRLGeneratorService crlGeneratorService;
     private final EncryptionService encryptionService;
+    private final UserKeyService userKeyService;
 
     public CRLService(
             CertificateRepository certificateRepository,
             RevokedCertificateRepository revokedCertificateRepository,
             CRLGeneratorService crlGeneratorService,
-            EncryptionService encryptionService) {
+            EncryptionService encryptionService,
+            UserKeyService userKeyService) {
         this.certificateRepository = certificateRepository;
         this.revokedCertificateRepository = revokedCertificateRepository;
         this.crlGeneratorService = crlGeneratorService;
         this.encryptionService = encryptionService;
+        this.userKeyService = userKeyService;
     }
 
     /**
@@ -372,9 +379,12 @@ public class CRLService {
             byte[] iv = java.util.Base64.getDecoder().decode(caCertificate.getEncryptionIV());
             byte[] tag = java.util.Base64.getDecoder().decode(caCertificate.getEncryptionTag());
             
-            // Decrypt the private key
+            // Get the user key for the user who created this certificate
+            byte[] userKey = userKeyService.getUserKey(caCertificate.getSignedBy().getId());
+            
+            // Decrypt the private key using the user's key
             java.security.PrivateKey caPrivateKey = encryptionService.decryptPrivateKey(
-                encryptedData, iv, tag, Base64.getEncoder().encodeToString(getMasterKey())
+                encryptedData, iv, tag, Base64.getEncoder().encodeToString(userKey)
             );
             
             // Return the decrypted private key
@@ -465,13 +475,17 @@ public class CRLService {
             throw new RuntimeException("Certificate is already revoked!");
         }
 
-        // Check authorization
-        if (requesterRole == Role.CA_USER && !certificate.getSignedBy().getId().equals(requesterId)) {
-            throw new RuntimeException("A CA user can only revoke certificates signed by them!");
-        } else if (requesterRole == Role.EE_USER) {
-            if (!certificate.getSignedBy().getId().equals(requesterId)) {
-                throw new RuntimeException("An EE user can only revoke certificates owned by them!");
-            }
+
+        // Admin can revoke any certificate
+        // CA cant revoke any certificate
+        if (requesterRole == Role.ADMIN) {
+            // ADMIN can revoke any certificate
+        } else if (requesterRole == Role.CA_USER) {
+            // CA cant revoke any certificate
+        }else if (requesterRole == Role.EE_USER){         
+            //temporary just check if the certificate is owned by the requester
+        } else {
+            throw new RuntimeException("Invalid user role for certificate revocation!");
         }
 
         // Create revoked certificate record
@@ -498,10 +512,25 @@ public class CRLService {
      * @return Byte array containing the CRL file
      */
     public byte[] getRevocationFile() {
-        // Find the main CA certificate (hardcoded as serial number "1" like in the other back-end)
-        Certificate mainCACertificate = certificateRepository.findBySerialNumber("1")
-                .orElseThrow(() -> new RuntimeException("Main CA certificate not found!"));
-
+        // Find the main CA certificate (root certificate with ROOT type)
+        List<Certificate> rootCertificates = certificateRepository.findByCertificateType(CertificateType.ROOT);
+        if (rootCertificates.isEmpty()) {
+            // If no root certificates exist, try to find any CA certificate that can sign
+            List<Certificate> caCertificates = certificateRepository.findAll().stream()
+                    .filter(cert -> cert.isCanSign())
+                    .collect(java.util.stream.Collectors.toList());
+            
+            if (caCertificates.isEmpty()) {
+                throw new RuntimeException("No CA certificates found! Please create a root CA certificate first.");
+            }
+            
+            // Use the first CA certificate found
+            Certificate mainCACertificate = caCertificates.get(0);
+            return generateCRL(mainCACertificate);
+        }
+        
+        // Use the first root certificate found
+        Certificate mainCACertificate = rootCertificates.get(0);
         return generateCRL(mainCACertificate);
     }
 

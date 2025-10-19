@@ -26,6 +26,6 @@ public interface CertificateTemplateRepository extends JpaRepository<Certificate
     boolean existsByNameAndCaIssuer(String name, User caIssuer);
     
     // Find templates by CA issuer's organization
-    @Query("SELECT t FROM CertificateTemplate t WHERE t.caIssuer.organization.id = :organizationId")
-    List<CertificateTemplate> findByCaIssuerOrganization(@Param("organizationId") Long organizationId);
+    @Query("SELECT t FROM CertificateTemplate t WHERE t.caIssuer.organization = :organizationName")
+    List<CertificateTemplate> findByCaIssuerOrganization(@Param("organizationName") String organizationName);
 }

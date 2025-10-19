@@ -15,16 +15,8 @@ public class UserDTO {
     private String firstName;
     private String lastName;
     private Role role;
-    private OrganizationDTO organization;
+    private String organization;
     private boolean enabled;
     private boolean emailConfirmed;
     private boolean mfaEnabled;
-    
-    @Data
-    @NoArgsConstructor
-    @AllArgsConstructor
-    public static class OrganizationDTO {
-        private Long id;
-        private String name;
-    }
 }

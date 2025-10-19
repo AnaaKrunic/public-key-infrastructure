@@ -35,9 +35,8 @@ public class User {
     @Column(nullable = false)
     private Role role = Role.EE_USER;  // Default role
 
-    @ManyToOne
-    @JoinColumn(name = "organization_id")
-    private Organization organization;
+    @Column(length = 255)
+    private String organization;
 
     @Column(nullable = false)
     private boolean enabled = false;

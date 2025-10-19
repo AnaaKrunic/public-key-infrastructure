@@ -10,7 +10,6 @@ import com.ftn.siit.ib.public_key_infrastructure.exceptions.*;
 import com.ftn.siit.ib.public_key_infrastructure.repositories.CertificateRepository;
 import com.ftn.siit.ib.public_key_infrastructure.repositories.UserRepository;
 import com.ftn.siit.ib.public_key_infrastructure.services.crypto.*;
-import com.ftn.siit.ib.public_key_infrastructure.services.crypto.EncryptionService.EncryptedData;
 import org.bouncycastle.asn1.x500.X500Name;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
@@ -27,6 +26,8 @@ import java.util.Base64;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Optional;
+import java.util.Set;
+import java.util.HashSet;
 
 /**
  * CertificateService manages the complete lifecycle of X.509 certificates in the PKI system.
@@ -134,7 +135,7 @@ public class CertificateService {
 
         // Encrypt private key with user-specific key
         byte[] userKey = userKeyService.getUserKey(admin.getId());
-        EncryptedData encryptedData = encryptionService.encryptPrivateKey(keyPair.getPrivate(), Base64.getEncoder().encodeToString(userKey));
+        EncryptionService.EncryptedData encryptedData = encryptionService.encryptPrivateKey(keyPair.getPrivate(), Base64.getEncoder().encodeToString(userKey));
         String encryptedPrivateKey = Base64.getEncoder().encodeToString(encryptedData.getEncryptedData());
         String iv = Base64.getEncoder().encodeToString(encryptedData.getIv());
         String tag = Base64.getEncoder().encodeToString(encryptedData.getTag());
@@ -168,6 +169,11 @@ public class CertificateService {
         certificateEntity.setEncryptionIV(iv);
         certificateEntity.setEncryptionTag(tag);
         certificateEntity.setCertificateData(keystoreService.exportCertificateAsPEM(certificate));
+        try {
+            certificateEntity.setEncodedValue(Base64.getEncoder().encodeToString(certificate.getEncoded()));
+        } catch (java.security.cert.CertificateEncodingException e) {
+            throw new RuntimeException("Failed to encode certificate", e);
+        }
         certificateEntity.setKeyUsage(String.join(",", dto.getKeyUsage()));
         certificateEntity.setPathLength(dto.getBasicConstraints().getPathLength());
         // Owner removed - using many-to-many relationship now
@@ -219,12 +225,8 @@ public class CertificateService {
         // Validate issuer certificate
         validationService.validateIssuerCertificate(issuer);
 
-        // Check path length constraints
-        if (issuer.getPathLength() != null && dto.getBasicConstraints().getPathLength() != null) {
-            if (issuer.getPathLength() < dto.getBasicConstraints().getPathLength() + 1) {
-                throw new IllegalArgumentException("Path length constraint violation");
-            }
-        }
+        // Path length constraints eliminated - all CA certificates can issue unlimited certificates
+        System.out.println("DEBUG: Path length constraints eliminated - unlimited certificate issuance allowed");
 
         // Generate key pair
         KeyPair keyPair = keyPairGeneratorService.generateKeyPair(dto.getKeySize());
@@ -239,12 +241,13 @@ public class CertificateService {
             issuer.getIssuerL(), issuer.getIssuerST(), issuer.getIssuerC(), issuer.getIssuerE()
         );
 
-        // Decrypt issuer's private key
+        // Decrypt issuer's private key using the issuer's user key
+        byte[] issuerUserKey = userKeyService.getUserKey(issuer.getSignedBy().getId());
         java.security.PrivateKey issuerPrivateKey = encryptionService.decryptPrivateKey(
             Base64.getDecoder().decode(issuer.getEncryptedPrivateKey()),
             Base64.getDecoder().decode(issuer.getEncryptionIV()),
             Base64.getDecoder().decode(issuer.getEncryptionTag()),
-            Base64.getEncoder().encodeToString(masterKeyService.getMasterKey())
+            Base64.getEncoder().encodeToString(issuerUserKey)
         );
 
         // Parse issuer's public key
@@ -258,7 +261,7 @@ public class CertificateService {
 
         // Encrypt private key with user-specific key
         byte[] userKey = userKeyService.getUserKey(admin.getId());
-        EncryptedData encryptedData = encryptionService.encryptPrivateKey(keyPair.getPrivate(), Base64.getEncoder().encodeToString(userKey));
+        EncryptionService.EncryptedData encryptedData = encryptionService.encryptPrivateKey(keyPair.getPrivate(), Base64.getEncoder().encodeToString(userKey));
         String encryptedPrivateKey = Base64.getEncoder().encodeToString(encryptedData.getEncryptedData());
         String iv = Base64.getEncoder().encodeToString(encryptedData.getIv());
         String tag = Base64.getEncoder().encodeToString(encryptedData.getTag());
@@ -274,13 +277,14 @@ public class CertificateService {
         certificateEntity.setSubjectC(dto.getSubjectC());
         certificateEntity.setSubjectE(dto.getSubjectE());
         certificateEntity.setSubjectDN(subjectDN.toString());
-        certificateEntity.setIssuerCN(issuer.getIssuerCN());
-        certificateEntity.setIssuerO(issuer.getIssuerO());
-        certificateEntity.setIssuerOU(issuer.getIssuerOU());
-        certificateEntity.setIssuerL(issuer.getIssuerL());
-        certificateEntity.setIssuerST(issuer.getIssuerST());
-        certificateEntity.setIssuerC(issuer.getIssuerC());
-        certificateEntity.setIssuerE(issuer.getIssuerE());
+        // Set issuer fields from the signing certificate's SUBJECT (not its issuer)
+        certificateEntity.setIssuerCN(issuer.getSubjectCN());
+        certificateEntity.setIssuerO(issuer.getSubjectO());
+        certificateEntity.setIssuerOU(issuer.getSubjectOU());
+        certificateEntity.setIssuerL(issuer.getSubjectL());
+        certificateEntity.setIssuerST(issuer.getSubjectST());
+        certificateEntity.setIssuerC(issuer.getSubjectC());
+        certificateEntity.setIssuerE(issuer.getSubjectE());
         certificateEntity.setIssuerDN(issuerDN.toString());
         certificateEntity.setValidFrom(LocalDateTime.now());
         certificateEntity.setValidTo(LocalDateTime.now().plusDays(dto.getValidityDays()));
@@ -292,6 +296,11 @@ public class CertificateService {
         certificateEntity.setEncryptionIV(iv);
         certificateEntity.setEncryptionTag(tag);
         certificateEntity.setCertificateData(keystoreService.exportCertificateAsPEM(certificate));
+        try {
+            certificateEntity.setEncodedValue(Base64.getEncoder().encodeToString(certificate.getEncoded()));
+        } catch (java.security.cert.CertificateEncodingException e) {
+            throw new RuntimeException("Failed to encode certificate", e);
+        }
         certificateEntity.setKeyUsage(String.join(",", dto.getKeyUsage()));
         certificateEntity.setPathLength(dto.getBasicConstraints().getPathLength());
         // Owner removed - using many-to-many relationship now
@@ -352,8 +361,26 @@ public class CertificateService {
         if (requester.getRole() == Role.EE_USER) {
             throw new UnauthorizedException("EE_USER cannot create certificates directly");
         }
-        if (requester.getRole() == Role.CA_USER && !issuer.getSignedBy().getId().equals(requester.getId())) {
-            throw new UnauthorizedException("CA_USER can only create certificates using their own CA certificates");
+        if (requester.getRole() == Role.CA_USER) {
+            // CA users can use certificates from their organization (including those that signed their CA)
+            boolean hasAccess = issuer.getSigningOrganization() != null && 
+                              issuer.getSigningOrganization().equals(requester.getOrganization());
+            
+            // Also check if certificate was signed by a CA user from the same organization
+            if (!hasAccess && issuer.getSignedBy() != null && 
+                issuer.getSignedBy().getRole() == Role.CA_USER && 
+                issuer.getSignedBy().getOrganization().equals(requester.getOrganization())) {
+                hasAccess = true;
+            }
+            
+            if (!hasAccess) {
+                throw new UnauthorizedException("CA_USER can only create certificates using certificates from their organization");
+            }
+            
+            // CA users can only issue certificates for their own organization
+            if (!requester.getOrganization().equals(dto.getSubjectO())) {
+                throw new UnauthorizedException("CA_USER can only issue certificates for their own organization");
+            }
         }
 
         // If templateId provided, validate against template constraints
@@ -371,36 +398,51 @@ public class CertificateService {
         KeyPair keyPair = keyPairGeneratorService.generateKeyPair(dto.getKeySize());
 
         // Build subject and issuer DNs
+        System.out.println("DEBUG: Building subject DN with CN=" + dto.getSubjectCN());
         X500Name subjectDN = certificateGeneratorService.buildX500Name(
             dto.getSubjectCN(), dto.getSubjectO(), dto.getSubjectOU(),
             dto.getSubjectL(), dto.getSubjectST(), dto.getSubjectC(), dto.getSubjectE()
         );
+        // For end-entity certificates, the issuer DN should be the SUBJECT of the signing certificate
+        System.out.println("DEBUG: Building issuer DN with CN=" + issuer.getSubjectCN() + 
+            ", O=" + issuer.getSubjectO() + ", OU=" + issuer.getSubjectOU() + 
+            ", L=" + issuer.getSubjectL() + ", ST=" + issuer.getSubjectST() + 
+            ", C=" + issuer.getSubjectC() + ", E=" + issuer.getSubjectE());
         X500Name issuerDN = certificateGeneratorService.buildX500Name(
-            issuer.getIssuerCN(), issuer.getIssuerO(), issuer.getIssuerOU(),
-            issuer.getIssuerL(), issuer.getIssuerST(), issuer.getIssuerC(), issuer.getIssuerE()
+            issuer.getSubjectCN(), issuer.getSubjectO(), issuer.getSubjectOU(),
+            issuer.getSubjectL(), issuer.getSubjectST(), issuer.getSubjectC(), issuer.getSubjectE()
         );
 
-        // Decrypt issuer's private key
+        // Decrypt issuer's private key using the issuer's user key
+        byte[] issuerUserKey = userKeyService.getUserKey(issuer.getSignedBy().getId());
         java.security.PrivateKey issuerPrivateKey = encryptionService.decryptPrivateKey(
             Base64.getDecoder().decode(issuer.getEncryptedPrivateKey()),
             Base64.getDecoder().decode(issuer.getEncryptionIV()),
             Base64.getDecoder().decode(issuer.getEncryptionTag()),
-            Base64.getEncoder().encodeToString(masterKeyService.getMasterKey())
+            Base64.getEncoder().encodeToString(issuerUserKey)
         );
 
         // Parse issuer's public key
         java.security.PublicKey issuerPublicKey = parsePublicKeyFromPEM(issuer.getPublicKey());
 
         // Generate end-entity certificate
-        X509Certificate certificate = certificateGeneratorService.generateEndEntityCertificate(
-            keyPair, subjectDN, issuerDN, issuerPrivateKey, issuerPublicKey,
-            dto.getValidityDays(), dto.getKeyUsage(), dto.getExtendedKeyUsage(), 
-            dto.getSubjectAlternativeNames(), dto.getCrlDistributionPoint()
-        );
+        System.out.println("DEBUG: About to generate end-entity certificate with validityDays=" + dto.getValidityDays());
+        X509Certificate certificate;
+        try {
+            certificate = certificateGeneratorService.generateEndEntityCertificate(
+                keyPair, subjectDN, issuerDN, issuerPrivateKey, issuerPublicKey,
+                dto.getValidityDays(), dto.getKeyUsage(), dto.getExtendedKeyUsage(), 
+                dto.getSubjectAlternativeNames(), dto.getCrlDistributionPoint()
+            );
+        } catch (Exception e) {
+            System.err.println("ERROR: Failed to generate end-entity certificate: " + e.getMessage());
+            e.printStackTrace();
+            throw new RuntimeException("Error creating certificate: " + e.getMessage(), e);
+        }
 
         // Encrypt private key with user-specific key
         byte[] userKey = userKeyService.getUserKey(requester.getId());
-        EncryptedData encryptedData = encryptionService.encryptPrivateKey(keyPair.getPrivate(), Base64.getEncoder().encodeToString(userKey));
+        EncryptionService.EncryptedData encryptedData = encryptionService.encryptPrivateKey(keyPair.getPrivate(), Base64.getEncoder().encodeToString(userKey));
         String encryptedPrivateKey = Base64.getEncoder().encodeToString(encryptedData.getEncryptedData());
         String iv = Base64.getEncoder().encodeToString(encryptedData.getIv());
         String tag = Base64.getEncoder().encodeToString(encryptedData.getTag());
@@ -416,13 +458,14 @@ public class CertificateService {
         certificateEntity.setSubjectC(dto.getSubjectC());
         certificateEntity.setSubjectE(dto.getSubjectE());
         certificateEntity.setSubjectDN(subjectDN.toString());
-        certificateEntity.setIssuerCN(issuer.getIssuerCN());
-        certificateEntity.setIssuerO(issuer.getIssuerO());
-        certificateEntity.setIssuerOU(issuer.getIssuerOU());
-        certificateEntity.setIssuerL(issuer.getIssuerL());
-        certificateEntity.setIssuerST(issuer.getIssuerST());
-        certificateEntity.setIssuerC(issuer.getIssuerC());
-        certificateEntity.setIssuerE(issuer.getIssuerE());
+        // Set issuer fields from the signing certificate's SUBJECT (not its issuer)
+        certificateEntity.setIssuerCN(issuer.getSubjectCN());
+        certificateEntity.setIssuerO(issuer.getSubjectO());
+        certificateEntity.setIssuerOU(issuer.getSubjectOU());
+        certificateEntity.setIssuerL(issuer.getSubjectL());
+        certificateEntity.setIssuerST(issuer.getSubjectST());
+        certificateEntity.setIssuerC(issuer.getSubjectC());
+        certificateEntity.setIssuerE(issuer.getSubjectE());
         certificateEntity.setIssuerDN(issuerDN.toString());
         certificateEntity.setValidFrom(LocalDateTime.now());
         certificateEntity.setValidTo(LocalDateTime.now().plusDays(dto.getValidityDays()));
@@ -434,6 +477,11 @@ public class CertificateService {
         certificateEntity.setEncryptionIV(iv);
         certificateEntity.setEncryptionTag(tag);
         certificateEntity.setCertificateData(keystoreService.exportCertificateAsPEM(certificate));
+        try {
+            certificateEntity.setEncodedValue(Base64.getEncoder().encodeToString(certificate.getEncoded()));
+        } catch (java.security.cert.CertificateEncodingException e) {
+            throw new RuntimeException("Failed to encode certificate", e);
+        }
         certificateEntity.setKeyUsage(String.join(",", dto.getKeyUsage()));
         certificateEntity.setExtendedKeyUsage(dto.getExtendedKeyUsage() != null ? String.join(",", dto.getExtendedKeyUsage()) : null);
         certificateEntity.setSubjectAlternativeNames(dto.getSubjectAlternativeNames() != null ? String.join(",", dto.getSubjectAlternativeNames()) : null);
@@ -442,7 +490,7 @@ public class CertificateService {
         certificateEntity.setSignedBy(requester);
         certificateEntity.setSigningCertificate(issuer);
         certificateEntity.setSigningOrganization(
-                null // Organization removed since issuer owner removed
+                requester.getOrganization() // Set to requester's organization
         );
 
         certificateRepository.save(certificateEntity);
@@ -495,9 +543,25 @@ public class CertificateService {
             return true;
         }
         
-        // CA_USER can access certificates they signed
-        if (requester.getRole() == Role.CA_USER && certificate.getSignedBy() != null) {
-            return certificate.getSignedBy().getId().equals(requester.getId());
+        // CA_USER can access certificates from their organization (including those that signed their CA)
+        if (requester.getRole() == Role.CA_USER) {
+            // Check if certificate belongs to the CA user's organization
+            boolean hasAccess = certificate.getSigningOrganization() != null && 
+                              certificate.getSigningOrganization().equals(requester.getOrganization());
+            
+            // Also check if certificate was signed by a CA user from the same organization
+            if (!hasAccess && certificate.getSignedBy() != null && 
+                certificate.getSignedBy().getRole() == Role.CA_USER && 
+                certificate.getSignedBy().getOrganization().equals(requester.getOrganization())) {
+                hasAccess = true;
+            }
+            
+            return hasAccess;
+        }
+        
+        // EE_USER can access their own certificates
+        if (requester.getRole() == Role.EE_USER) {
+            return certificate.getSignedBy() != null && certificate.getSignedBy().getId().equals(requester.getId());
         }
         
         return false;
@@ -537,8 +601,25 @@ public class CertificateService {
             // ADMIN can see all certificates
             certificates = certificateRepository.findAll(pageable);
         } else if (requester.getRole() == Role.CA_USER) {
-            // CA_USER can see certificates they own or issued
-            certificates = certificateRepository.findBySignedBy(requester, pageable);
+            // CA_USER can see certificates from their organization (including those that signed their CA)
+            List<CertificateDTO> orgCerts = getValidSigningCertificatesForOrganization(requester.getOrganization());
+            // Convert DTOs to entities for consistency with the method signature
+            List<Certificate> orgCertEntities = orgCerts.stream()
+                .map(dto -> {
+                    Certificate cert = new Certificate();
+                    cert.setId(dto.getId());
+                    cert.setSerialNumber(dto.getSerialNumber());
+                    cert.setSubjectCN(dto.getSubjectCN());
+                    cert.setIssuerCN(dto.getIssuerCN());
+                    cert.setValidFrom(dto.getValidFrom());
+                    cert.setValidTo(dto.getValidTo());
+                    cert.setCanSign(dto.getCanSign());
+                    cert.setPathLength(dto.getPathLength());
+                    cert.setStatus(dto.getStatus());
+                    return cert;
+                })
+                .toList();
+            certificates = new org.springframework.data.domain.PageImpl<>(orgCertEntities, pageable, orgCertEntities.size());
         } else {
             // EE_USER can only see their own certificates
             // EE_USER can see certificates in their MyCertificates collection
@@ -920,14 +1001,7 @@ public class CertificateService {
             dto.setSigningCertificate(signingCertDTO);
         }
 
-        if (certificate.getSigningOrganization() != null) {
-            CertificateDTO.OrganizationDTO organizationDTO = new CertificateDTO.OrganizationDTO(
-                    certificate.getSigningOrganization().getId(),
-                    certificate.getSigningOrganization().getName(),
-                    certificate.getSigningOrganization().getContactEmail()
-            );
-            dto.setSigningOrganization(organizationDTO);
-        }
+        dto.setSigningOrganization(certificate.getSigningOrganization());
         
         return dto;
     }
@@ -1042,6 +1116,48 @@ public class CertificateService {
     }
 
     /**
+     * Gets valid signing certificates for a specific organization.
+     * CA users can use ALL certificates created by their organization, including those that signed their CA.
+     * 
+     * @param organization The organization name
+     * @return List of valid signing certificates for the organization
+     */
+    public List<CertificateDTO> getValidSigningCertificatesForOrganization(String organization) {
+        // Get all signing certificates
+        List<Certificate> allSigningCerts = certificateRepository.findAll().stream()
+                .filter(cert -> cert.isCanSign())
+                .toList();
+        
+        // Filter for certificates that belong to the organization
+        // CA users can use ALL certificates created by their organization (including those that signed their CA)
+        List<Certificate> orgSigningCerts = allSigningCerts.stream()
+                .filter(cert -> {
+                    // Check if signingOrganization matches (certificates created by this organization)
+                    if (organization.equals(cert.getSigningOrganization())) {
+                        return true;
+                    }
+                    
+                    // Check if certificate was signed by a CA user from this organization
+                    if (cert.getSignedBy() != null && 
+                        cert.getSignedBy().getRole() == Role.CA_USER && 
+                        organization.equals(cert.getSignedBy().getOrganization())) {
+                        return true;
+                    }
+                    
+                    return false;
+                })
+                .toList();
+        
+        List<Certificate> validCerts = orgSigningCerts.stream()
+                .filter(cert -> getStatus(cert) == CertificateStatus.ACTIVE)
+                .toList();
+        
+        return validCerts.stream()
+                .map(cert -> convertToDTOWithStatus(cert, getStatus(cert).toString()))
+                .toList();
+    }
+
+    /**
      * Gets valid signing certificates that a CA user doesn't have.
      * 
      * @param caUserId The ID of the CA user
@@ -1100,6 +1216,9 @@ public class CertificateService {
     public List<CertificateDTO> getMyCertificates(String userId) {
         User user = userRepository.findById(Long.parseLong(userId))
                 .orElseThrow(() -> new RuntimeException("User not found!"));
+
+        System.out.println("DEBUG: Getting certificates for user " + userId);
+        System.out.println("DEBUG: User " + user.getEmail() + " has " + user.getMyCertificates().size() + " certificates");
         
         // Use the MyCertificates collection like the other back-end
         List<Certificate> certificates = user.getMyCertificates();
@@ -1127,21 +1246,114 @@ public class CertificateService {
                 .map(cert -> convertToDTOWithStatus(cert, getStatus(cert).toString()))
                 .toList();
     }
-
+    
     /**
-     * Gets certificates signed by a specific CA user.
+     * Gets valid CA certificates (canSign = true) from the user's chain that can be used for signing.
+     * This includes:
+     * - CA certificates owned by the user
+     * - CA certificates that signed the user's certificates (up the chain)
      * 
      * @param userId The ID of the CA user
-     * @return List of certificates signed by the user
+     * @return List of valid CA certificates that can be used for signing
+     */
+    public List<CertificateDTO> getMyValidSigningCertificates(String userId) {
+        User caUser = userRepository.findById(Long.parseLong(userId))
+                .orElseThrow(() -> new RuntimeException("CA user not found!"));
+        
+        // Get all CA certificates owned by this user
+        List<Certificate> ownedCaCerts = caUser.getMyCertificates().stream()
+                .filter(cert -> cert.isCanSign())
+                .filter(cert -> getStatus(cert) == CertificateStatus.ACTIVE)
+                .toList();
+        
+        // Collect all CA certificates in the chain (including issuers up the chain)
+        Set<Certificate> allSigningCertsInChain = new HashSet<>(ownedCaCerts);
+        
+        for (Certificate ownedCert : ownedCaCerts) {
+            // Add all CA certificates up the chain (issuers)
+            collectIssuersUpTheChain(ownedCert, allSigningCertsInChain);
+        }
+        
+        return allSigningCertsInChain.stream()
+                .filter(cert -> getStatus(cert) == CertificateStatus.ACTIVE)
+                .map(cert -> convertToDTOWithStatus(cert, getStatus(cert).toString()))
+                .toList();
+    }
+    
+    /**
+     * Recursively collects all CA certificates up the issuer chain.
+     * 
+     * @param certificate The certificate to start from
+     * @param result The set to collect certificates into
+     */
+    private void collectIssuersUpTheChain(Certificate certificate, Set<Certificate> result) {
+        Certificate issuer = certificate.getIssuerCertificate();
+        
+        if (issuer != null && issuer.isCanSign()) {
+            // Avoid infinite loops
+            if (!result.contains(issuer)) {
+                result.add(issuer);
+                // Recursively collect issuers up the chain
+                collectIssuersUpTheChain(issuer, result);
+            }
+        }
+    }
+
+    /**
+     * Gets all certificates in the CA user's chain.
+     * This includes:
+     * - Certificates they own (their CA certificates)
+     * - Certificates signed by their CA certificates
+     * - Certificates signed by those certificates (recursively down the chain)
+     * 
+     * @param userId The ID of the CA user
+     * @return List of all certificates in the user's chain
      */
     public List<CertificateDTO> getCertificatesSignedByMe(String userId) {
         User caUser = userRepository.findById(Long.parseLong(userId))
                 .orElseThrow(() -> new RuntimeException("CA user not found!"));
         
-        List<Certificate> certificates = certificateRepository.findBySignedBy(caUser);
-        return certificates.stream()
-                .map(this::convertToDTO)
+        // Get all CA certificates owned by this user
+        List<Certificate> caCertificates = caUser.getMyCertificates().stream()
+                .filter(cert -> cert.isCanSign())
                 .toList();
+        
+        // Collect all certificates in the chain
+        Set<Certificate> allCertificatesInChain = new HashSet<>();
+        
+        for (Certificate caCert : caCertificates) {
+            // Add the CA certificate itself
+            allCertificatesInChain.add(caCert);
+            // Add all certificates issued by this CA certificate (recursively)
+            collectCertificatesIssuedBy(caCert, allCertificatesInChain);
+        }
+        
+        return allCertificatesInChain.stream()
+                .map(cert -> convertToDTOWithStatus(cert, getStatus(cert).toString()))
+                .toList();
+    }
+    
+    /**
+     * Recursively collects all certificates issued by a given certificate.
+     * 
+     * @param issuerCert The issuer certificate
+     * @param result The set to collect certificates into
+     */
+    private void collectCertificatesIssuedBy(Certificate issuerCert, Set<Certificate> result) {
+        // Find all certificates issued by this certificate
+        List<Certificate> issuedCertificates = certificateRepository.findAll().stream()
+                .filter(cert -> cert.getIssuerCertificate() != null && 
+                               cert.getIssuerCertificate().getId().equals(issuerCert.getId()))
+                .toList();
+        
+        for (Certificate issuedCert : issuedCertificates) {
+            // Avoid infinite loops in case of circular references
+            if (!result.contains(issuedCert)) {
+                result.add(issuedCert);
+                // Recursively collect certificates issued by this certificate
+                collectCertificatesIssuedBy(issuedCert, result);
+            }
+        }
     }
 
     /**
@@ -1179,36 +1391,49 @@ public class CertificateService {
         }
         
         try {
+            System.out.println("DEBUG: Starting PKCS12 generation for certificate " + request.getCertificateSerialNumber() + " for user " + userId);
+            
             // Decrypt the private key using the user's key
+            System.out.println("DEBUG: Getting user key for user " + userId);
             byte[] userKey = userKeyService.getUserKey(userId);
-            EncryptedData encryptedData = new EncryptedData(
+            System.out.println("DEBUG: Retrieved user key, length: " + userKey.length);
+            
+            EncryptionService.EncryptedData encryptedData = new EncryptionService.EncryptedData(
                 Base64.getDecoder().decode(certificate.getEncryptedPrivateKey()),
                 Base64.getDecoder().decode(certificate.getEncryptionIV()),
                 Base64.getDecoder().decode(certificate.getEncryptionTag())
             );
+            System.out.println("DEBUG: Created encrypted data object for private key decryption");
             
             // Decrypt private key
+            System.out.println("DEBUG: Calling encryption service to decrypt private key");
             java.security.PrivateKey privateKey = encryptionService.decryptPrivateKey(
                 encryptedData.getEncryptedData(),
                 encryptedData.getIv(),
                 encryptedData.getTag(),
                 Base64.getEncoder().encodeToString(userKey)
             );
+            System.out.println("DEBUG: Successfully decrypted private key");
             
             // Parse the certificate from PEM data
             X509Certificate x509Certificate = parseX509CertificateFromPEM(certificate.getCertificateData());
+            System.out.println("DEBUG: Successfully parsed X509Certificate");
             
             // Build certificate chain
             List<X509Certificate> certificateChain = buildCertificateChain(certificate);
+            System.out.println("DEBUG: Built certificate chain with " + certificateChain.size() + " certificates");
             
             // Generate PKCS#12 keystore
-            return keystoreService.createPKCS12Keystore(
+            System.out.println("DEBUG: Creating PKCS12 keystore with password length: " + request.getPassword().length());
+            byte[] pkcs12Bytes = keystoreService.createPKCS12Keystore(
                 privateKey, 
                 certificateChain, 
                 request.getPassword(),
                 "privatekey",
                 "certificate"
             );
+            System.out.println("DEBUG: Successfully created PKCS12 keystore, size: " + pkcs12Bytes.length + " bytes");
+            return pkcs12Bytes;
             
         } catch (Exception e) {
             throw new RuntimeException("Failed to generate PKCS#12 file for certificate " + request.getCertificateSerialNumber() + ": " + e.getMessage(), e);
@@ -1320,7 +1545,7 @@ public class CertificateService {
         
         // Encrypt private key with user-specific key
         byte[] userKey = userKeyService.getUserKey(signingUser.getId());
-        EncryptedData encryptedData = encryptionService.encryptPrivateKey(keyPair.getPrivate(), Base64.getEncoder().encodeToString(userKey));
+        EncryptionService.EncryptedData encryptedData = encryptionService.encryptPrivateKey(keyPair.getPrivate(), Base64.getEncoder().encodeToString(userKey));
         
         Certificate certificate = new Certificate();
         certificate.setSerialNumber(generateSerialNumber());
@@ -1329,12 +1554,31 @@ public class CertificateService {
         certificate.setSubjectOU(request.getOrganizationalUnit());
         certificate.setSubjectE(request.getEmail());
         certificate.setSubjectC(request.getCountry());
-        certificate.setIssuerDN(signingCert != null ? signingCert.getSubjectDN() : request.getCommonName());
+        // Set issuer information from the signing certificate
+        if (signingCert != null) {
+            certificate.setIssuerCN(signingCert.getSubjectCN());
+            certificate.setIssuerO(signingCert.getSubjectO());
+            certificate.setIssuerOU(signingCert.getSubjectOU());
+            certificate.setIssuerL(signingCert.getSubjectL());
+            certificate.setIssuerST(signingCert.getSubjectST());
+            certificate.setIssuerC(signingCert.getSubjectC());
+            certificate.setIssuerE(signingCert.getSubjectE());
+            certificate.setIssuerDN(signingCert.getSubjectDN());
+        } else {
+            // Self-signed certificate
+            certificate.setIssuerCN(request.getCommonName());
+            certificate.setIssuerO(request.getOrganization());
+            certificate.setIssuerOU(request.getOrganizationalUnit());
+            certificate.setIssuerC(request.getCountry());
+            certificate.setIssuerE(request.getEmail());
+            certificate.setIssuerDN(buildSubjectDN(request));
+        }
         certificate.setSubjectDN(buildSubjectDN(request));
         certificate.setValidFrom(request.getNotBefore() != null ? request.getNotBefore() : LocalDateTime.now());
         certificate.setValidTo(request.getNotAfter() != null ? request.getNotAfter() : LocalDateTime.now().plusYears(1));
         certificate.setSigningCertificate(signingCert);
         certificate.setSignedBy(signingUser);
+        certificate.setSigningOrganization(signingUser.getOrganization());
         certificate.setCanSign(false); // End entity certificates typically can't sign
         certificate.setPathLength(0);
         certificate.setCertificateType(CertificateType.END_ENTITY);

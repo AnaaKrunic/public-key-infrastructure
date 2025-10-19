@@ -1,0 +1,36 @@
+<div class="activation-container">
+  <div class="activation-card">
+    <div class="header">
+      <h1>Account Activation</h1>
+      <p>Please wait while we activate your account...</p>
+    </div>
+
+    <div class="content">
+      <!-- Loading State -->
+      <div *ngIf="isLoading" class="loading">
+        <div class="spinner"></div>
+        <p>Activating your account...</p>
+      </div>
+
+      <!-- Success State -->
+      <div *ngIf="!isLoading && isSuccess" class="success">
+        <div class="success-icon">✓</div>
+        <h2>Success!</h2>
+        <p>{{ message }}</p>
+        <p>Redirecting to login page...</p>
+        <button class="btn-primary" (click)="goToLogin()">Go to Login</button>
+      </div>
+
+      <!-- Error State -->
+      <div *ngIf="!isLoading && !isSuccess" class="error">
+        <div class="error-icon">✗</div>
+        <h2>Activation Failed</h2>
+        <p>{{ message }}</p>
+        <div class="actions">
+          <button class="btn-primary" (click)="goToLogin()">Go to Login</button>
+          <button class="btn-secondary" (click)="goToRegistration()">Register Again</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

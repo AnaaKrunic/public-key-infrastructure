@@ -1,1 +1,82 @@
-<p>login works!</p>
+<div class="login-container">
+  <div class="login-card">
+    <div class="header">
+      <h1>Prijava</h1>
+      <p>Prijavite se na svoj nalog</p>
+    </div>
+
+    <form [formGroup]="loginForm" (ngSubmit)="onSubmit()" class="login-form">
+      <!-- Email Field -->
+      <div class="form-group">
+        <label for="email">Email adresa *</label>
+        <input
+          type="email"
+          id="email"
+          formControlName="email"
+          placeholder="Unesite email adresu"
+          class="form-control"
+          [class.error]="getFieldError('email')"
+        />
+        <div class="error-message" *ngIf="getFieldError('email')">
+          {{ getFieldError('email') }}
+        </div>
+      </div>
+
+      <!-- Password Field -->
+      <div class="form-group">
+        <label for="password">Lozinka *</label>
+        <input
+          type="password"
+          id="password"
+          formControlName="password"
+          placeholder="Unesite lozinku"
+          class="form-control"
+          [class.error]="getFieldError('password')"
+        />
+        <div class="error-message" *ngIf="getFieldError('password')">
+          {{ getFieldError('password') }}
+        </div>
+      </div>
+
+      <!-- MFA Code Field -->
+      <div class="form-group" *ngIf="showMfaField">
+        <label for="mfaCode">MFA Kod *</label>
+        <input
+          type="text"
+          id="mfaCode"
+          formControlName="mfaCode"
+          placeholder="Unesite 6-cifreni MFA kod"
+          class="form-control"
+          [class.error]="getFieldError('mfaCode')"
+          maxlength="6"
+        />
+        <div class="error-message" *ngIf="getFieldError('mfaCode')">
+          {{ getFieldError('mfaCode') }}
+        </div>
+        <div class="mfa-help">
+          <small>Unesite 6-cifreni kod iz vaše autentifikacione aplikacije</small>
+        </div>
+      </div>
+
+      <!-- Error Message -->
+      <div class="error-message global-error" *ngIf="errorMessage">
+        {{ errorMessage }}
+      </div>
+
+      <!-- Submit Button -->
+      <button
+        type="submit"
+        class="submit-btn"
+        [disabled]="isLoading || !loginForm.valid"
+      >
+        <span *ngIf="!isLoading">Prijavite se</span>
+        <span *ngIf="isLoading">Prijava u toku...</span>
+      </button>
+    </form>
+
+    <!-- Registration Link -->
+    <div class="registration-link">
+      <p>Nemate nalog? <a (click)="goToRegistration()" class="link">Registrujte se</a></p>
+    </div>
+  </div>
+</div>

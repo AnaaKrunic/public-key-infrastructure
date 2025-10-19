@@ -1,5 +1,5 @@
 export interface CreateCertificateRequest {
-  signingOrganization: string;
+  signingCertificate: string; // Serial number of the signing certificate
   commonName: string;
   organization: string;
   organizationalUnit: string;

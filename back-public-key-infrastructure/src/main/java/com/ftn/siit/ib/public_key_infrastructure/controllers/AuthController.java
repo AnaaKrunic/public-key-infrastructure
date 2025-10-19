@@ -4,6 +4,7 @@ import com.ftn.siit.ib.public_key_infrastructure.dtos.*;
 import com.ftn.siit.ib.public_key_infrastructure.services.user.IUserService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -19,7 +20,7 @@ public class AuthController {
     @PostMapping("/register")
     public ResponseEntity<?> registerUser(@RequestBody UserRegistrationDTO dto) {
         userService.register(dto);
-        return ResponseEntity.ok("User registered successfully. Check your email for activation link.");
+        return ResponseEntity.ok().body(Map.of("message", "User registered successfully. Check your email for activation link."));
     }
 
     @GetMapping("/activate")
@@ -27,19 +28,19 @@ public class AuthController {
         boolean activated = userService.activateAccount(token);
 
         if (activated) {
-            return ResponseEntity.ok("Account activated successfully.");
+            return ResponseEntity.ok().body(Map.of("message", "Account activated successfully."));
         } else {
-            return ResponseEntity.badRequest().body("Invalid or expired activation token.");
+            return ResponseEntity.badRequest().body(Map.of("message", "Invalid or expired activation token."));
         }
     }
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody LoginDTO loginDTO) {
         try {
-            String result = userService.login(loginDTO);
-            return ResponseEntity.ok(result);
+            String token = userService.login(loginDTO);
+            return ResponseEntity.ok().body(Map.of("accessToken", token));
         } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         }
     }
 }

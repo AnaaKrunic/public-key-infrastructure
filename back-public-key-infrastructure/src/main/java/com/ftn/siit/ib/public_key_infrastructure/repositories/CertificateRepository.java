@@ -33,8 +33,8 @@ public interface CertificateRepository extends JpaRepository<Certificate, Long> 
     Page<Certificate> findBySignedBy(User signedBy, Pageable pageable);
 
     // Find by signing organization
-    List<Certificate> findBySigningOrganization(Organization signingOrganization);
-    Page<Certificate> findBySigningOrganization(Organization signingOrganization, Pageable pageable);
+    List<Certificate> findBySigningOrganization(String signingOrganization);
+    Page<Certificate> findBySigningOrganization(String signingOrganization, Pageable pageable);
     
     // Find by status
     List<Certificate> findByStatus(CertificateStatus status);

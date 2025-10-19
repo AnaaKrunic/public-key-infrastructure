@@ -275,7 +275,9 @@ public class CertificateGeneratorService {
 
         int keyUsage = 0;
         for (String usage : keyUsageList) {
-            switch (usage.toLowerCase()) {
+            // Normalize: lowercase and remove underscores/spaces
+            String normalizedUsage = usage.toLowerCase().replace("_", "").replace(" ", "");
+            switch (normalizedUsage) {
                 case "digitalsignature":
                     keyUsage |= KeyUsage.digitalSignature;
                     break;
@@ -322,7 +324,8 @@ public class CertificateGeneratorService {
         KeyPurposeId[] keyPurposeIds = new KeyPurposeId[extendedKeyUsageList.size()];
         for (int i = 0; i < extendedKeyUsageList.size(); i++) {
             String originalUsage = extendedKeyUsageList.get(i);
-            String usage = originalUsage.toLowerCase();
+            // Normalize: lowercase and remove underscores/spaces
+            String usage = originalUsage.toLowerCase().replace("_", "").replace(" ", "");
             switch (usage) {
                 case "serverauth":
                     keyPurposeIds[i] = KeyPurposeId.id_kp_serverAuth;

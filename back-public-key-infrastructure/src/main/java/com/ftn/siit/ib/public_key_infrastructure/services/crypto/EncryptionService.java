@@ -71,28 +71,39 @@ public class EncryptionService {
      * @throws SecurityException if decryption fails (invalid key or corrupted data)
      */
     public java.security.PrivateKey decryptPrivateKey(byte[] encryptedData, byte[] iv, byte[] tag, String masterKey) {
+        System.out.println("DEBUG: Decrypting private key with encrypted data length: " + encryptedData.length + 
+                         ", IV length: " + iv.length + ", tag length: " + tag.length + ", master key length: " + masterKey.length());
+        
         validateDecryptParameters(encryptedData, iv, tag, masterKey);
         
         try {
             byte[] keyBytes = Base64.getDecoder().decode(masterKey);
+            System.out.println("DEBUG: Decoded master key bytes, length: " + keyBytes.length);
             SecretKey secretKey = new SecretKeySpec(keyBytes, ALGORITHM);
             
             Cipher cipher = Cipher.getInstance(TRANSFORMATION);
             GCMParameterSpec gcmSpec = new GCMParameterSpec(GCM_TAG_LENGTH * 8, iv);
             cipher.init(Cipher.DECRYPT_MODE, secretKey, gcmSpec);
+            System.out.println("DEBUG: Initialized cipher for private key decryption");
             
             // Combine encrypted data and tag
             byte[] ciphertextWithTag = new byte[encryptedData.length + tag.length];
             System.arraycopy(encryptedData, 0, ciphertextWithTag, 0, encryptedData.length);
             System.arraycopy(tag, 0, ciphertextWithTag, encryptedData.length, tag.length);
+            System.out.println("DEBUG: Combined ciphertext with tag, total length: " + ciphertextWithTag.length);
             
             byte[] decryptedBytes = cipher.doFinal(ciphertextWithTag);
+            System.out.println("DEBUG: Successfully decrypted private key bytes, length: " + decryptedBytes.length);
             
             // Convert back to PrivateKey
             java.security.KeyFactory keyFactory = java.security.KeyFactory.getInstance("RSA");
             java.security.spec.PKCS8EncodedKeySpec keySpec = new java.security.spec.PKCS8EncodedKeySpec(decryptedBytes);
-            return keyFactory.generatePrivate(keySpec);
+            java.security.PrivateKey privateKey = keyFactory.generatePrivate(keySpec);
+            System.out.println("DEBUG: Successfully converted decrypted bytes to PrivateKey");
+            return privateKey;
         } catch (Exception e) {
+            System.err.println("DEBUG: Failed to decrypt private key: " + e.getMessage());
+            e.printStackTrace();
             throw new SecurityException("Failed to decrypt private key - invalid master key or corrupted data", e);
         }
     }

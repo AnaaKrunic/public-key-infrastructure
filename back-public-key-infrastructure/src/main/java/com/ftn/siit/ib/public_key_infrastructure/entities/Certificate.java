@@ -125,9 +125,8 @@ public class Certificate {
     @JoinColumn(name = "signed_by_id", nullable = false)
     private User signedBy;  // User who initiated the signing operation
 
-    @ManyToOne
-    @JoinColumn(name = "signing_organization_id")
-    private Organization signingOrganization; // Organization responsible for signing
+    @Column(length = 255)
+    private String signingOrganization; // Organization responsible for signing
 
     // ===== Metadata =====
     @Column(nullable = false)

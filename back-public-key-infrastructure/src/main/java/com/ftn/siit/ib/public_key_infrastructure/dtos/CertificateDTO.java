@@ -49,7 +49,7 @@ public class CertificateDTO {
     private CertificateDTO issuerCertificate;
     private CertificateDTO signingCertificate;
     private TemplateDTO template;
-    private OrganizationDTO signingOrganization;
+    private String signingOrganization;
     private LocalDateTime createdAt;
 
     @Data

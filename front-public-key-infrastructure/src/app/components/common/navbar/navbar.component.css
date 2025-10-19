@@ -1,0 +1,120 @@
+.navbar {
+  background: #2c3e50;
+  color: white;
+  padding: 1rem 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.navbar-brand h2 {
+  margin: 0;
+  color: #ecf0f1;
+  font-size: 1.5rem;
+}
+
+.navbar-menu {
+  display: flex;
+  gap: 2rem;
+  flex: 1;
+  margin: 0 2rem;
+}
+
+.menu-section h3 {
+  margin: 0 0 0.5rem 0;
+  font-size: 0.9rem;
+  color: #bdc3c7;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.menu-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  gap: 1rem;
+}
+
+.menu-list li {
+  margin: 0;
+}
+
+.menu-list a {
+  color: #ecf0f1;
+  text-decoration: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  transition: background-color 0.3s ease;
+  display: block;
+}
+
+.menu-list a:hover {
+  background-color: #34495e;
+}
+
+.menu-list a.active {
+  background-color: #3498db;
+  color: white;
+}
+
+.navbar-user {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.user-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.user-name {
+  font-weight: bold;
+  color: #ecf0f1;
+}
+
+.user-role {
+  font-size: 0.8rem;
+  color: #bdc3c7;
+}
+
+.logout-btn {
+  background: #e74c3c;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+.logout-btn:hover {
+  background: #c0392b;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .navbar {
+    flex-direction: column;
+    padding: 1rem;
+  }
+
+  .navbar-menu {
+    flex-direction: column;
+    margin: 1rem 0;
+    gap: 1rem;
+  }
+
+  .menu-list {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .navbar-user {
+    width: 100%;
+    justify-content: space-between;
+  }
+}

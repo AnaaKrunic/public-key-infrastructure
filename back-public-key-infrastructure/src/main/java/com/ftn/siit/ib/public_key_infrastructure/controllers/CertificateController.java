@@ -4,6 +4,7 @@ import com.ftn.siit.ib.public_key_infrastructure.dtos.*;
 import com.ftn.siit.ib.public_key_infrastructure.entities.Certificate;
 import com.ftn.siit.ib.public_key_infrastructure.entities.Role;
 import com.ftn.siit.ib.public_key_infrastructure.entities.User;
+import com.ftn.siit.ib.public_key_infrastructure.repositories.UserRepository;
 import com.ftn.siit.ib.public_key_infrastructure.services.CertificateService;
 import com.ftn.siit.ib.public_key_infrastructure.services.FileDownloadService;
 import org.springframework.http.HttpHeaders;
@@ -24,10 +25,12 @@ public class CertificateController {
 
     private final CertificateService certificateService;
     private final FileDownloadService fileDownloadService;
+    private final UserRepository userRepository;
 
-    public CertificateController(CertificateService certificateService, FileDownloadService fileDownloadService) {
+    public CertificateController(CertificateService certificateService, FileDownloadService fileDownloadService, UserRepository userRepository) {
         this.certificateService = certificateService;
         this.fileDownloadService = fileDownloadService;
+        this.userRepository = userRepository;
     }
 
     /**
@@ -58,6 +61,7 @@ public class CertificateController {
      * Access depends on user role.
      */
     @GetMapping("/get-all")
+    @PreAuthorize("hasAnyRole('ADMIN')")
     public ResponseEntity<?> getAllCertificates() {
         try {
             var certificates = certificateService.getAllCertificates();
@@ -80,6 +84,26 @@ public class CertificateController {
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body("Error retrieving valid signing certificates: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Gets valid CA certificates from the current CA user's chain that can be used for signing.
+     * Requires CA_USER role.
+     */
+    @GetMapping("/get-organization-signing-certificates")
+    @PreAuthorize("hasRole('CA_USER')")
+    public ResponseEntity<?> getOrganizationSigningCertificates() {
+        try {
+            // Get current user from security context
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            String userId = getCurrentUserId(authentication);
+            
+            var certificates = certificateService.getMyValidSigningCertificates(userId);
+            return ResponseEntity.ok(certificates);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body("Error retrieving signing certificates: " + e.getMessage());
         }
     }
 
@@ -197,8 +221,13 @@ public class CertificateController {
             
             // Get current user from security context
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-            Long userId = Long.parseLong(getCurrentUserId(authentication));
-            Role role = getCurrentUserRoleEnum(authentication);
+            String userEmail = authentication.getName();
+            
+            // Look up the actual user by email to get their ID
+            User user = userRepository.findByEmail(userEmail)
+                    .orElseThrow(() -> new RuntimeException("User not found"));
+            Long userId = user.getId();
+            Role role = user.getRole();
             
             // Generate PKCS#12 file
             byte[] pfxBytes = certificateService.getCertificateWithPasswordAsPkcs12(dto, userId, role);
@@ -268,11 +297,23 @@ public class CertificateController {
             
             // Check authorization - Admin has access to all certificates
             if (user.getRole() != Role.ADMIN) {
-                // CA users can access certificates they signed
-                if (user.getRole() == Role.CA_USER && 
-                    (certificate.getSignedBy() == null || !certificate.getSignedBy().getId().equals(user.getId()))) {
-                    return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                            .body("Access denied to certificate");
+                // CA users can access certificates from their organization (including those that signed their CA)
+                if (user.getRole() == Role.CA_USER) {
+                    // Check if certificate belongs to the CA user's organization
+                    boolean hasAccess = certificate.getSigningOrganization() != null && 
+                                      certificate.getSigningOrganization().equals(user.getOrganization());
+                    
+                    // Also check if certificate was signed by a CA user from the same organization
+                    if (!hasAccess && certificate.getSignedBy() != null && 
+                        certificate.getSignedBy().getRole() == Role.CA_USER && 
+                        certificate.getSignedBy().getOrganization().equals(user.getOrganization())) {
+                        hasAccess = true;
+                    }
+                    
+                    if (!hasAccess) {
+                        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                                .body("Access denied to certificate");
+                    }
                 }
                 
                 // Users can access their own certificates
@@ -351,13 +392,85 @@ public class CertificateController {
     }
 
     /**
+     * Creates a root CA certificate (self-signed).
+     * Requires Admin role.
+     */
+    @PostMapping("/root")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<?> createRootCertificate(@RequestBody CreateRootCertificateDTO dto) {
+        try {
+            // Get current user from security context
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            String userId = getCurrentUserId(authentication);
+            
+            // Fetch the User object from database
+            User admin = certificateService.getUserRepository().findById(Long.parseLong(userId))
+                    .orElseThrow(() -> new RuntimeException("User not found"));
+            
+            var certificate = certificateService.createRootCertificate(dto, admin);
+            return ResponseEntity.ok(certificate);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body("Error creating root certificate: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Creates an intermediate CA certificate.
+     * Requires Admin or CA_USER role.
+     */
+    @PostMapping("/intermediate")
+    @PreAuthorize("hasAnyRole('ADMIN', 'CA_USER')")
+    public ResponseEntity<?> createIntermediateCertificate(@RequestBody CreateIntermediateCertificateDTO dto) {
+        try {
+            // Get current user from security context
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            String userId = getCurrentUserId(authentication);
+            
+            // Fetch the User object from database
+            User user = certificateService.getUserRepository().findById(Long.parseLong(userId))
+                    .orElseThrow(() -> new RuntimeException("User not found"));
+            
+            var certificate = certificateService.createIntermediateCertificate(dto, user);
+            return ResponseEntity.ok(certificate);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body("Error creating intermediate certificate: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Creates an end entity certificate.
+     * Requires Admin or CA_USER role.
+     */
+    @PostMapping("/end-entity")
+    @PreAuthorize("hasAnyRole('ADMIN', 'CA_USER')")
+    public ResponseEntity<?> createEndEntityCertificate(@RequestBody CreateEndEntityCertificateDTO dto) {
+        try {
+            // Get current user from security context
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            String userId = getCurrentUserId(authentication);
+            
+            // Fetch the User object from database
+            User user = certificateService.getUserRepository().findById(Long.parseLong(userId))
+                    .orElseThrow(() -> new RuntimeException("User not found"));
+            
+            var certificate = certificateService.createEndEntityCertificate(dto, user);
+            return ResponseEntity.ok(certificate);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body("Error creating end entity certificate: " + e.getMessage());
+        }
+    }
+
+    /**
      * Helper method to get current user ID from authentication context.
-     * This is a placeholder implementation - in a real system, you'd look up the user by email.
      */
     private String getCurrentUserId(Authentication authentication) {
-        // This is a placeholder - in a real implementation, you'd look up the user by email
-        // and return their actual ID
-        return "1";
+        String email = authentication.getName();
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        return user.getId().toString();
     }
 
     /**

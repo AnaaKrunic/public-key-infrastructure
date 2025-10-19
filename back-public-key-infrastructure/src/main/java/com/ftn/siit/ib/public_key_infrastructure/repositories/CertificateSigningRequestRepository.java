@@ -46,12 +46,12 @@ public interface CertificateSigningRequestRepository extends JpaRepository<Certi
     List<CertificateSigningRequest> findByRequestedFrom(User requestedFrom);
     
     // Find CSRs by selected CA's organization (for CA users) - using many-to-many relationship
-    @Query("SELECT csr FROM CertificateSigningRequest csr WHERE csr.selectedCA IN (SELECT c FROM User u JOIN u.myCertificates c WHERE u.organization.id = :organizationId)")
-    List<CertificateSigningRequest> findBySelectedCAOrganization(@Param("organizationId") Long organizationId);
+    @Query("SELECT csr FROM CertificateSigningRequest csr WHERE csr.selectedCA IN (SELECT c FROM User u JOIN u.myCertificates c WHERE u.organization = :organizationName)")
+    List<CertificateSigningRequest> findBySelectedCAOrganization(@Param("organizationName") String organizationName);
     
     // Find pending CSRs by selected CA's organization - using many-to-many relationship
-    @Query("SELECT csr FROM CertificateSigningRequest csr WHERE csr.selectedCA IN (SELECT c FROM User u JOIN u.myCertificates c WHERE u.organization.id = :organizationId) AND csr.status = 'PENDING'")
-    List<CertificateSigningRequest> findPendingBySelectedCAOrganization(@Param("organizationId") Long organizationId);
+    @Query("SELECT csr FROM CertificateSigningRequest csr WHERE csr.selectedCA IN (SELECT c FROM User u JOIN u.myCertificates c WHERE u.organization = :organizationName) AND csr.status = 'PENDING'")
+    List<CertificateSigningRequest> findPendingBySelectedCAOrganization(@Param("organizationName") String organizationName);
     
     // Find CSRs by processed by user
     List<CertificateSigningRequest> findByProcessedBy(User processedBy);

@@ -6,5 +6,6 @@ export interface BasicUser {
   name: string | null;
   surname: string | null;
   email?: string;
+  organization?: string;
 }
 

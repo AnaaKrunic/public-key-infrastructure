@@ -5,10 +5,8 @@ import com.ftn.siit.ib.public_key_infrastructure.dtos.UserRegistrationDTO;
 import com.ftn.siit.ib.public_key_infrastructure.dtos.UserDTO;
 import com.ftn.siit.ib.public_key_infrastructure.dtos.CreateCAUserDTO;
 import com.ftn.siit.ib.public_key_infrastructure.dtos.ValidCAUserDTO;
-import com.ftn.siit.ib.public_key_infrastructure.entities.Organization;
 import com.ftn.siit.ib.public_key_infrastructure.entities.User;
 import com.ftn.siit.ib.public_key_infrastructure.entities.Role;
-import com.ftn.siit.ib.public_key_infrastructure.repositories.OrganizationRepository;
 import com.ftn.siit.ib.public_key_infrastructure.repositories.UserRepository;
 import com.ftn.siit.ib.public_key_infrastructure.repositories.CertificateRepository;
 import com.ftn.siit.ib.public_key_infrastructure.security.JwtUtil;
@@ -20,6 +18,7 @@ import com.ftn.siit.ib.public_key_infrastructure.entities.Certificate;
 import com.ftn.siit.ib.public_key_infrastructure.entities.CertificateStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -30,7 +29,6 @@ import java.util.stream.Collectors;
 public class UserService implements IUserService {
 
     private final UserRepository userRepository;
-    private final OrganizationRepository organizationRepository;
     private final CertificateRepository certificateRepository;
     private final PasswordEncoder passwordEncoder;
     private final EmailService emailService;
@@ -39,7 +37,6 @@ public class UserService implements IUserService {
     private final CertificateService certificateService;
 
     public UserService(UserRepository userRepository,
-                       OrganizationRepository organizationRepository,
                        CertificateRepository certificateRepository,
                        PasswordEncoder passwordEncoder,
                        EmailService emailService,
@@ -47,7 +44,6 @@ public class UserService implements IUserService {
                        JwtUtil jwtUtil,
                        CertificateService certificateService) {
         this.userRepository = userRepository;
-        this.organizationRepository = organizationRepository;
         this.certificateRepository = certificateRepository;
         this.passwordEncoder = passwordEncoder;
         this.emailService = emailService;
@@ -71,19 +67,12 @@ public class UserService implements IUserService {
             throw new IllegalArgumentException("Password doesn't meet the requirements.");
         }
 
-        Organization organization = organizationRepository.findByName(dto.getOrganization())
-            .orElseGet(() -> {
-                Organization newOrg = new Organization();
-                newOrg.setName(dto.getOrganization());
-                return organizationRepository.save(newOrg);
-            });
-
         User user = new User();
         user.setEmail(dto.getEmail());
         user.setPasswordHash(passwordEncoder.encode(dto.getPassword()));
         user.setFirstName(dto.getFirstName());
         user.setLastName(dto.getLastName());
-        user.setOrganization(organization);
+        user.setOrganization(dto.getOrganization());
 
         user.setEmailConfirmed(false);
         user.setRefreshToken(null);
@@ -162,6 +151,13 @@ public class UserService implements IUserService {
     }
 
     @Override
+    public boolean isMfaEnabled(String email) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        return user.isMfaEnabled();
+    }
+
+    @Override
     public User findByEmail(String email) {
         return userRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("User not found"));
@@ -181,12 +177,7 @@ public class UserService implements IUserService {
         userDTO.setEmailConfirmed(user.isEmailConfirmed());
         userDTO.setMfaEnabled(user.isMfaEnabled());
         
-        if (user.getOrganization() != null) {
-            UserDTO.OrganizationDTO orgDTO = new UserDTO.OrganizationDTO();
-            orgDTO.setId(user.getOrganization().getId());
-            orgDTO.setName(user.getOrganization().getName());
-            userDTO.setOrganization(orgDTO);
-        }
+        userDTO.setOrganization(user.getOrganization());
         
         return userDTO;
     }
@@ -205,10 +196,8 @@ public class UserService implements IUserService {
         // Get all CA users
         List<User> caUsers = userRepository.findByRole(Role.CA_USER);
 
-        // Filter CA users who have at least one active certificate using MyCertificates collection
+        // Return all CA users, with validity dates calculated for those with certificates
         return caUsers.stream()
-                .filter(user -> user.getMyCertificates().stream()
-                        .anyMatch(cert -> certificateService.getStatus(cert) == CertificateStatus.ACTIVE))
                 .map(user -> {
                     List<Certificate> activeCertificates = user.getMyCertificates().stream()
                             .filter(cert -> certificateService.getStatus(cert) == CertificateStatus.ACTIVE)
@@ -219,7 +208,7 @@ public class UserService implements IUserService {
                     dto.setEmail(user.getEmail());
                     dto.setFirstName(user.getFirstName());
                     dto.setLastName(user.getLastName());
-                    dto.setOrganization(user.getOrganization() != null ? user.getOrganization().getName() : null);
+                    dto.setOrganization(user.getOrganization());
 
                     // Find min valid from and max valid until from active certificates
                     if (!activeCertificates.isEmpty()) {
@@ -232,6 +221,7 @@ public class UserService implements IUserService {
                                 .max(LocalDateTime::compareTo)
                                 .orElse(null));
                     }
+                    // If no active certificates, minValidFrom and maxValidUntil will remain null
 
                     return dto;
                 })
@@ -249,17 +239,13 @@ public class UserService implements IUserService {
         userDTO.setEmailConfirmed(user.isEmailConfirmed());
         userDTO.setMfaEnabled(user.isMfaEnabled());
         
-        if (user.getOrganization() != null) {
-            UserDTO.OrganizationDTO orgDTO = new UserDTO.OrganizationDTO();
-            orgDTO.setId(user.getOrganization().getId());
-            orgDTO.setName(user.getOrganization().getName());
-            userDTO.setOrganization(orgDTO);
-        }
+        userDTO.setOrganization(user.getOrganization());
         
         return userDTO;
     }
 
     @Override
+    @Transactional
     public UserDTO createCaUser(CreateCAUserDTO dto) {
         // Check if email already exists
         if (userRepository.findByEmail(dto.getEmail()).isPresent()) {
@@ -271,13 +257,9 @@ public class UserService implements IUserService {
             throw new IllegalArgumentException("Password doesn't meet the requirements.");
         }
 
-        // Find or create organization
-        Organization organization = organizationRepository.findByName(dto.getOrganization())
-            .orElseGet(() -> {
-                Organization newOrg = new Organization();
-                newOrg.setName(dto.getOrganization());
-                return organizationRepository.save(newOrg);
-            });
+        // Use organization name directly as string
+        String organizationName = dto.getOrganization().trim();
+        System.out.println("DEBUG: Using organization name: '" + organizationName + "'");
 
         // Create CA user
         User user = new User();
@@ -286,7 +268,7 @@ public class UserService implements IUserService {
         user.setFirstName(dto.getFirstName());
         user.setLastName(dto.getLastName());
         user.setRole(Role.CA_USER); // Set as CA_USER
-        user.setOrganization(organization);
+        user.setOrganization(organizationName); // Set organization as string
         user.setEnabled(true); // CA users are enabled by default
         user.setEmailConfirmed(true); // CA users are email confirmed by default
         user.setMfaEnabled(false); // MFA can be enabled later

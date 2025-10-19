@@ -1,5 +1,6 @@
 package com.ftn.siit.ib.public_key_infrastructure.dtos;
 
+import com.ftn.siit.ib.public_key_infrastructure.entities.CSRStatus;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
@@ -27,4 +28,5 @@ public class CertificateRequestResponseDTO {
     private String nameConstraints;
     private String basicConstraints;
     private String certificatePolicy;
+    private CSRStatus status;
 }

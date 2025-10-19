@@ -1,0 +1,53 @@
+<nav class="navbar" *ngIf="isLoggedIn">
+  <div class="navbar-brand">
+    <h2>PKI Management System</h2>
+  </div>
+
+  <div class="navbar-menu">
+    <!-- Admin Menu -->
+    <div class="menu-section" *ngIf="hasRole('ADMIN')">
+      <h3>Administration</h3>
+      <ul class="menu-list">
+        <li><a routerLink="/admin/certificates" routerLinkActive="active">All Certificates</a></li>
+        <li><a routerLink="/admin/issue" routerLinkActive="active">Issue Certificate</a></li>
+        <li><a routerLink="/admin/ca-users" routerLinkActive="active">CA User Management</a></li>
+      </ul>
+    </div>
+
+    <!-- CA User Menu -->
+    <div class="menu-section" *ngIf="hasRole('CA_USER')">
+      <h3>Certificate Authority</h3>
+      <ul class="menu-list">
+        <li><a routerLink="/ca/certificates" routerLinkActive="active">Signed Certificates</a></li>
+        <li><a routerLink="/ca/pending-csrs" routerLinkActive="active">Pending CSRs</a></li>
+        <li><a routerLink="/admin/issue" routerLinkActive="active">Issue Certificate</a></li>
+      </ul>
+    </div>
+
+    <!-- EE User Menu -->
+    <div class="menu-section" *ngIf="hasRole('EE_USER')">
+      <h3>My Certificates</h3>
+      <ul class="menu-list">
+        <li><a routerLink="/my-certificates" routerLinkActive="active">My Certificates</a></li>
+        <li><a routerLink="/request-certificate" routerLinkActive="active">Request Certificate</a></li>
+      </ul>
+    </div>
+
+    <!-- Common Menu -->
+    <div class="menu-section">
+      <h3>General</h3>
+      <ul class="menu-list">
+        <li><a routerLink="/my-certificates" routerLinkActive="active" *ngIf="hasRole('CA_USER')">My Certificates</a></li>
+        <li><a routerLink="/crl" routerLinkActive="active">Certificate Revocation List</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="navbar-user">
+    <div class="user-info">
+      <span class="user-name">{{ getDisplayName() }}</span>
+      <span class="user-role">{{ getRoleDisplayName() }}</span>
+    </div>
+    <button class="logout-btn" (click)="logout()">Logout</button>
+  </div>
+</nav>

@@ -1,0 +1,190 @@
+.activation-container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 20px;
+}
+
+.activation-card {
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+  padding: 40px;
+  max-width: 500px;
+  width: 100%;
+  text-align: center;
+}
+
+.header {
+  margin-bottom: 30px;
+}
+
+.header h1 {
+  color: #333;
+  font-size: 2rem;
+  margin-bottom: 10px;
+  font-weight: 600;
+}
+
+.header p {
+  color: #666;
+  font-size: 1rem;
+}
+
+.content {
+  min-height: 200px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+/* Loading State */
+.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #667eea;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Success State */
+.success {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+.success-icon {
+  width: 60px;
+  height: 60px;
+  background: #28a745;
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  font-weight: bold;
+}
+
+.success h2 {
+  color: #28a745;
+  font-size: 1.5rem;
+  margin: 0;
+}
+
+.success p {
+  color: #666;
+  margin: 5px 0;
+}
+
+/* Error State */
+.error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+.error-icon {
+  width: 60px;
+  height: 60px;
+  background: #dc3545;
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  font-weight: bold;
+}
+
+.error h2 {
+  color: #dc3545;
+  font-size: 1.5rem;
+  margin: 0;
+}
+
+.error p {
+  color: #666;
+  margin: 5px 0;
+}
+
+/* Buttons */
+.btn-primary, .btn-secondary {
+  padding: 12px 24px;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-decoration: none;
+  display: inline-block;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
+}
+
+.btn-secondary {
+  background: #f8f9fa;
+  color: #666;
+  border: 1px solid #dee2e6;
+}
+
+.btn-secondary:hover {
+  background: #e9ecef;
+  transform: translateY(-2px);
+}
+
+.actions {
+  display: flex;
+  gap: 15px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+  .activation-card {
+    padding: 30px 20px;
+  }
+  
+  .header h1 {
+    font-size: 1.5rem;
+  }
+  
+  .actions {
+    flex-direction: column;
+    align-items: center;
+  }
+  
+  .btn-primary, .btn-secondary {
+    width: 100%;
+    max-width: 200px;
+  }
+}

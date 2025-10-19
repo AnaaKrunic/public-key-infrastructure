@@ -46,7 +46,7 @@ export const routes: Routes = [
   // EE User routes
   { 
     path: 'my-certificates', 
-    loadComponent: () => import('./components/common/my-certificates/my-certificates.component').then(m => m.MyCertificatesComponent), 
+    loadComponent: () => import('./components/ee-user/my-certificates/my-certificates.component').then(m => m.MyCertificatesComponent), 
     canActivate: [authGuard],
     data: { roles: ['EE_USER', 'CA_USER'] as Role[] }
   },
