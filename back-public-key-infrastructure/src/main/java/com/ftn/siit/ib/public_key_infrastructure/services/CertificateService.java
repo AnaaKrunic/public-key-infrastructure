@@ -18,8 +18,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.security.KeyPair;
-import java.security.KeyFactory;
-import java.security.spec.RSAPublicKeySpec;
 import java.security.cert.X509Certificate;
 import java.time.LocalDateTime;
 import java.util.Base64;
@@ -100,6 +98,7 @@ public class CertificateService {
      * @throws UnauthorizedException if admin does not have ADMIN role
      */
     public CertificateDTO createRootCertificate(CreateRootCertificateDTO dto, User admin) {
+        System.out.println("INFO: createRootCertificate of CertificateService called");
         if (dto == null) {
             throw new IllegalArgumentException("DTO cannot be null");
         }
@@ -199,23 +198,38 @@ public class CertificateService {
      * 7. Save with issuerCertificate reference
      * 
      * @param dto Certificate creation parameters including issuer serial number
-     * @param admin The admin user creating the certificate (must have ADMIN role)
+     * @param user The admin user creating the certificate (must have ADMIN role)
      * @return CertificateDTO containing the created certificate details
      * @throws IllegalArgumentException if dto or admin is null
      * @throws ValidationException if validation fails
      * @throws UnauthorizedException if admin does not have ADMIN role
      * @throws NotFoundException if issuer certificate not found
      */
-    public CertificateDTO createIntermediateCertificate(CreateIntermediateCertificateDTO dto, User admin) {
+    public CertificateDTO createIntermediateCertificate(CreateIntermediateCertificateDTO dto, User user) {
+        System.out.println("INFO: createIntermediateCertificate of CertificateService called");
         // Validate parameters
         if (dto == null) {
             throw new IllegalArgumentException("DTO cannot be null");
         }
-        if (admin == null) {
+        if (user == null) {
             throw new IllegalArgumentException("Admin cannot be null");
         }
-        if (admin.getRole() != Role.ADMIN) {
-            throw new UnauthorizedException("Only ADMIN users can create intermediate certificates");
+        if (user.getRole() == Role.ADMIN) {
+
+        } else if (user.getRole() == Role.CA_USER){
+            // CA users can create intermediate certificates only using their own CA certificates
+            boolean hasAccess = false;
+            Certificate issuerCert = certificateRepository.findById(dto.getIssuerCertificateId())
+                .orElseThrow(() -> new NotFoundException("Issuer certificate not found"));
+            if(dto.getSubjectO().equals(user.getOrganization()) &&
+               issuerCert.getSubjectO().equals(user.getOrganization())){
+                hasAccess = true;
+            }
+            if (!hasAccess) {
+                throw new UnauthorizedException("CA_USER can only create intermediate certificates using certificates from their organization");
+            }
+        } else{
+            throw new UnauthorizedException("Only ADMIN and CA users can create intermediate certificates");
         }
 
         // Fetch issuer certificate
@@ -224,6 +238,11 @@ public class CertificateService {
 
         // Validate issuer certificate
         validationService.validateIssuerCertificate(issuer);
+
+        // Validate that issuer's validity period covers the new certificate's validity period
+        LocalDateTime newCertValidFrom = LocalDateTime.now();
+        LocalDateTime newCertValidTo = LocalDateTime.now().plusDays(dto.getValidityDays());
+        validationService.validateCertificateValidityPeriod(issuer, newCertValidFrom, newCertValidTo);
 
         // Path length constraints eliminated - all CA certificates can issue unlimited certificates
         System.out.println("DEBUG: Path length constraints eliminated - unlimited certificate issuance allowed");
@@ -260,7 +279,7 @@ public class CertificateService {
         );
 
         // Encrypt private key with user-specific key
-        byte[] userKey = userKeyService.getUserKey(admin.getId());
+        byte[] userKey = userKeyService.getUserKey(user.getId());
         EncryptionService.EncryptedData encryptedData = encryptionService.encryptPrivateKey(keyPair.getPrivate(), Base64.getEncoder().encodeToString(userKey));
         String encryptedPrivateKey = Base64.getEncoder().encodeToString(encryptedData.getEncryptedData());
         String iv = Base64.getEncoder().encodeToString(encryptedData.getIv());
@@ -305,10 +324,10 @@ public class CertificateService {
         certificateEntity.setPathLength(dto.getBasicConstraints().getPathLength());
         // Owner removed - using many-to-many relationship now
         certificateEntity.setIssuerCertificate(issuer);
-        certificateEntity.setSignedBy(admin);
+        certificateEntity.setSignedBy(user);
         certificateEntity.setSigningCertificate(issuer);
         certificateEntity.setSigningOrganization(
-                admin.getOrganization() // Organization from admin since issuer owner removed
+                user.getOrganization() // Organization from admin since issuer owner removed
         );
 
         certificateRepository.save(certificateEntity);
@@ -341,7 +360,8 @@ public class CertificateService {
      * @throws UnauthorizedException if requester lacks permission
      * @throws TemplateConstraintViolationException if template constraints are violated
      */
-    public CertificateDTO createEndEntityCertificate(CreateEndEntityCertificateDTO dto, User requester) {
+    public CertificateDTO createEndEntityCertificate(CreateEndEntityCertificateDTO dto, User requester, Boolean isFromCSR) {
+        System.out.println("INFO: createEndEntityCertificate of CertificateService called");
         // Validate parameters
         if (dto == null) {
             throw new IllegalArgumentException("DTO cannot be null");
@@ -361,25 +381,19 @@ public class CertificateService {
         if (requester.getRole() == Role.EE_USER) {
             throw new UnauthorizedException("EE_USER cannot create certificates directly");
         }
-        if (requester.getRole() == Role.CA_USER) {
-            // CA users can use certificates from their organization (including those that signed their CA)
-            boolean hasAccess = issuer.getSigningOrganization() != null && 
-                              issuer.getSigningOrganization().equals(requester.getOrganization());
-            
-            // Also check if certificate was signed by a CA user from the same organization
-            if (!hasAccess && issuer.getSignedBy() != null && 
-                issuer.getSignedBy().getRole() == Role.CA_USER && 
-                issuer.getSignedBy().getOrganization().equals(requester.getOrganization())) {
-                hasAccess = true;
+        else if (requester.getRole() == Role.CA_USER) {
+            // CA users can create intermediate certificates only using their own CA certificates
+            boolean giveAccess = true;
+            Certificate issuerCert = certificateRepository.findById(dto.getIssuerCertificateId())
+                    .orElseThrow(() -> new NotFoundException("Issuer certificate not found"));
+
+            if (!isFromCSR &&
+                    dto.getSubjectO().equals(requester.getOrganization()) &&
+                    issuerCert.getSubjectO().equals(requester.getOrganization())) {
+                giveAccess = false;
             }
-            
-            if (!hasAccess) {
-                throw new UnauthorizedException("CA_USER can only create certificates using certificates from their organization");
-            }
-            
-            // CA users can only issue certificates for their own organization
-            if (!requester.getOrganization().equals(dto.getSubjectO())) {
-                throw new UnauthorizedException("CA_USER can only issue certificates for their own organization");
+            if (!giveAccess) {
+                throw new UnauthorizedException("CA_USER can only create intermediate certificates using certificates from their organization");
             }
         }
 
@@ -393,6 +407,11 @@ public class CertificateService {
 
         // Validate issuer certificate
         validationService.validateIssuerCertificate(issuer);
+
+        // Validate that issuer's validity period covers the new certificate's validity period
+        LocalDateTime newCertValidFrom = LocalDateTime.now();
+        LocalDateTime newCertValidTo = LocalDateTime.now().plusDays(dto.getValidityDays());
+        validationService.validateCertificateValidityPeriod(issuer, newCertValidFrom, newCertValidTo);
 
         // Generate key pair
         KeyPair keyPair = keyPairGeneratorService.generateKeyPair(dto.getKeySize());
@@ -514,6 +533,7 @@ public class CertificateService {
      * @throws ForbiddenException if requester does not have access
      */
     public CertificateDTO getCertificateBySerialNumber(String serialNumber, User requester) {
+        System.out.println("INFO: getCertificateBySerialNumber of CertificateService called");
         // Validate parameters
         if (serialNumber == null) {
             throw new IllegalArgumentException("Serial number cannot be null");
@@ -559,9 +579,11 @@ public class CertificateService {
             return hasAccess;
         }
         
-        // EE_USER can access their own certificates
+        // EE_USER can access their own certificates (certificates in their myCertificates collection)
         if (requester.getRole() == Role.EE_USER) {
-            return certificate.getSignedBy() != null && certificate.getSignedBy().getId().equals(requester.getId());
+            // Compare by ID to avoid issues with JPA entity instance comparison
+            return requester.getMyCertificates().stream()
+                    .anyMatch(cert -> cert.getId().equals(certificate.getId()));
         }
         
         return false;
@@ -802,9 +824,14 @@ public class CertificateService {
         Certificate certificate = certificateRepository.findBySerialNumber(serialNumber)
             .orElseThrow(() -> new NotFoundException("Certificate not found"));
 
-        // Check authorization (owner or ADMIN)
+        // Check authorization
         if (!hasAccessToCertificate(certificate, requester)) {
             throw new ForbiddenException("Access denied to certificate");
+        }
+
+        // Only EE users can download private keys
+        if (requester.getRole() != Role.EE_USER) {
+            throw new ForbiddenException("Access denied. Only end-entity users can download certificates with private keys. Admins and CA users can only download certificate data (PEM format).");
         }
 
         // Build certificate chain
@@ -818,12 +845,22 @@ public class CertificateService {
             current = current.getIssuerCertificate();
         }
 
-        // Decrypt private key
+        // Determine which user's key to use for decryption
+        // The private key was encrypted with the certificate owner's key (signedBy user)
+        User keyOwner = certificate.getSignedBy();
+        if (keyOwner == null) {
+            throw new RuntimeException("Certificate has no owner (signedBy is null). Cannot decrypt private key.");
+        }
+        
+        // Use the certificate owner's key to decrypt the private key
+        byte[] ownerKey = userKeyService.getUserKey(keyOwner.getId());
+        
+        // Decrypt private key using the owner's key
         java.security.PrivateKey privateKey = encryptionService.decryptPrivateKey(
             Base64.getDecoder().decode(certificate.getEncryptedPrivateKey()),
             Base64.getDecoder().decode(certificate.getEncryptionIV()),
             Base64.getDecoder().decode(certificate.getEncryptionTag()),
-            Base64.getEncoder().encodeToString(masterKeyService.getMasterKey())
+            Base64.getEncoder().encodeToString(ownerKey)
         );
 
         // Parse X509Certificate from PEM
@@ -905,19 +942,51 @@ public class CertificateService {
     }
     
     /**
-     * Helper method to parse public key from PEM string
-     * TODO: Implement proper PEM parsing
+     * Helper method to parse public key from PEM string.
+     * 
+     * Supports standard PEM format for public keys:
+     * - -----BEGIN PUBLIC KEY----- (X.509 SubjectPublicKeyInfo format)
+     * - -----BEGIN RSA PUBLIC KEY----- (PKCS#1 RSA format)
+     * 
+     * @param pemString The PEM-encoded public key string
+     * @return PublicKey object
+     * @throws IllegalArgumentException if pemString is null or empty
+     * @throws RuntimeException if parsing fails
      */
     private java.security.PublicKey parsePublicKeyFromPEM(String pemString) {
-        // This is a placeholder implementation
-        // In a real implementation, you would parse the PEM string and create a PublicKey
+        if (pemString == null || pemString.trim().isEmpty()) {
+            throw new IllegalArgumentException("PEM string cannot be null or empty");
+        }
+
         try {
-            KeyFactory keyFactory = KeyFactory.getInstance("RSA");
-            // Use a 2048-bit RSA key for testing
-            java.math.BigInteger modulus = new java.math.BigInteger("1").shiftLeft(2048).subtract(java.math.BigInteger.ONE);
-            return keyFactory.generatePublic(new RSAPublicKeySpec(modulus, java.math.BigInteger.valueOf(65537)));
+            // Remove PEM headers and footers
+            String cleanPem = pemString
+                .replace("-----BEGIN PUBLIC KEY-----", "")
+                .replace("-----END PUBLIC KEY-----", "")
+                .replace("-----BEGIN RSA PUBLIC KEY-----", "")
+                .replace("-----END RSA PUBLIC KEY-----", "")
+                .replaceAll("\\s", "");
+            
+            // Decode Base64 to get DER data
+            byte[] derData = java.util.Base64.getDecoder().decode(cleanPem);
+            
+            // Create key factory
+            java.security.KeyFactory keyFactory = java.security.KeyFactory.getInstance("RSA");
+            
+            // Parse X.509 format (SubjectPublicKeyInfo)
+            // This is the standard format for "BEGIN PUBLIC KEY"
+            java.security.spec.X509EncodedKeySpec keySpec = 
+                new java.security.spec.X509EncodedKeySpec(derData);
+            
+            return keyFactory.generatePublic(keySpec);
+        } catch (java.security.spec.InvalidKeySpecException e) {
+            throw new RuntimeException("Invalid public key format: " + e.getMessage(), e);
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new RuntimeException("RSA algorithm not available: " + e.getMessage(), e);
+        } catch (IllegalArgumentException e) {
+            throw new RuntimeException("Invalid Base64 encoding in PEM data: " + e.getMessage(), e);
         } catch (Exception e) {
-            throw new RuntimeException("Failed to parse public key", e);
+            throw new RuntimeException("Failed to parse public key from PEM: " + e.getMessage(), e);
         }
     }
 
@@ -1008,38 +1077,6 @@ public class CertificateService {
 
 
     /**
-     * Adds a certificate to a CA user's certificate collection.
-     * 
-     * @param caUserId The ID of the CA user
-     * @param certificateId The ID of the certificate to add
-     * @throws IllegalArgumentException if caUserId or certificateId is null
-     * @throws NotFoundException if user or certificate not found
-     */
-    public void addCertificateToCaUser(Long caUserId, Long certificateId) {
-        if (caUserId == null) {
-            throw new IllegalArgumentException("CA user ID cannot be null");
-        }
-        if (certificateId == null) {
-            throw new IllegalArgumentException("Certificate ID cannot be null");
-        }
-
-        // Find the CA user
-        User caUser = userRepository.findById(caUserId)
-            .orElseThrow(() -> new NotFoundException("CA user not found"));
-
-        // Find the certificate
-        Certificate certificate = certificateRepository.findById(certificateId)
-            .orElseThrow(() -> new NotFoundException("Certificate not found"));
-
-        // Add certificate to user's collection
-        // Note: This assumes there's a relationship between User and Certificate
-        // The exact implementation depends on how the relationship is modeled
-        // For now, we'll assume the certificate's owner is set to the CA user
-        // Owner removed - using many-to-many relationship now
-        certificateRepository.save(certificate);
-    }
-
-    /**
      * Determines the current status of a certificate based on various factors.
      * 
      * Status determination logic:
@@ -1111,6 +1148,70 @@ public class CertificateService {
                 .toList();
         
         return validCerts.stream()
+                .map(cert -> convertToDTOWithStatus(cert, getStatus(cert).toString()))
+                .toList();
+    }
+
+    /**
+     * Gets all valid CA certificates (excluding root certificates).
+     * Root certificates are identified by having no issuer certificate (self-signed).
+     * This is used by EE users when requesting certificates.
+     * Returns only basic information (CN, O, OU, serial number).
+     * 
+     * @return List of valid CA certificates with basic info only (non-root)
+     */
+    public List<BasicCACertificateDTO> getAllValidCACertificates() {
+        List<Certificate> allCaCerts = certificateRepository.findAll().stream()
+                .filter(cert -> cert.isCanSign())
+                .filter(cert -> cert.getIssuerCertificate() != null) // Exclude root certificates
+                .filter(cert -> getStatus(cert) == CertificateStatus.ACTIVE)
+                .toList();
+        
+        return allCaCerts.stream()
+                .map(this::convertToBasicCADTO)
+                .toList();
+    }
+    
+    /**
+     * Converts a Certificate to BasicCACertificateDTO with only essential info.
+     * 
+     * @param certificate The certificate to convert
+     * @return BasicCACertificateDTO with basic information
+     */
+    private BasicCACertificateDTO convertToBasicCADTO(Certificate certificate) {
+        return new BasicCACertificateDTO(
+                certificate.getSerialNumber(),
+                certificate.getSubjectCN(),
+                certificate.getSubjectO(),
+                certificate.getSubjectOU()
+        );
+    }
+
+    /**
+     * Gets all CA certificates from a specific CA user's chain.
+     * This includes all CA certificates that the user can sign with (owned + up the chain).
+     * 
+     * @param caUserId The ID of the CA user
+     * @return List of CA certificates in the user's chain
+     */
+    public List<CertificateDTO> getCACertificatesFromUserChain(String caUserId) {
+        User caUser = userRepository.findById(Long.parseLong(caUserId))
+                .orElseThrow(() -> new RuntimeException("CA user not found!"));
+        
+        // Get all CA certificates owned by this user
+        List<Certificate> ownedCaCerts = caUser.getMyCertificates().stream()
+                .filter(cert -> cert.isCanSign())
+                .toList();
+        
+        // Collect all CA certificates in the chain (including issuers up the chain)
+        Set<Certificate> allCaInChain = new HashSet<>(ownedCaCerts);
+        
+        for (Certificate ownedCert : ownedCaCerts) {
+            // Add all CA certificates up the chain (issuers)
+            collectIssuersUpTheChain(ownedCert, allCaInChain);
+        }
+        
+        return allCaInChain.stream()
                 .map(cert -> convertToDTOWithStatus(cert, getStatus(cert).toString()))
                 .toList();
     }
@@ -1190,19 +1291,42 @@ public class CertificateService {
 
     /**
      * Adds a certificate to a CA user.
+     * Only certificates from the same organization as the CA user can be assigned.
      * 
      * @param request The request containing CA user ID and certificate serial number
+     * @throws RuntimeException if CA user not found, user is not a CA role, certificate not found, or organizations don't match
      */
     public void addCertificateToCaUser(AddCertificateToCaUserRequestDTO request) {
         // Find the CA user
         User caUser = userRepository.findById(Long.parseLong(request.getCaUserId()))
                 .orElseThrow(() -> new RuntimeException("CA user not found!"));
+
+        // Ensure CA role
+        if (caUser.getRole() != Role.CA_USER) {
+            throw new RuntimeException("User is not a CA user!");
+        }
         
         // Find the certificate
         Certificate certificate = certificateRepository.findBySerialNumber(request.getNewCertificateSerialNumber())
                 .orElseThrow(() -> new RuntimeException("Certificate not found!"));
+
+        // Ensure CA user and certificate are from same organization
+        if (caUser.getOrganization() == null || certificate.getSigningOrganization() == null) {
+            throw new RuntimeException("CA user or certificate organization is not set!");
+        }
         
-        // Add certificate to user's collection (like other back-end)
+        if (!caUser.getOrganization().equals(certificate.getSubjectO())) {
+            throw new RuntimeException("CA user and certificate must belong to the same organization! " +
+                    "User organization: " + caUser.getOrganization() + 
+                    ", Certificate organization: " + certificate.getSigningOrganization());
+        }
+        
+        // Check if certificate is already assigned to this user
+        if (caUser.getMyCertificates().contains(certificate)) {
+            throw new RuntimeException("Certificate is already assigned to this CA user!");
+        }
+        
+        // Add certificate to user's collection
         caUser.getMyCertificates().add(certificate);
         userRepository.save(caUser);
     }
@@ -1386,6 +1510,12 @@ public class CertificateService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found with ID: " + userId));
         
+        // Only EE users can download private keys (PKCS12 with private key)
+        if (user.getRole() != Role.EE_USER) {
+            throw new RuntimeException("Access denied. Only end-entity users can download certificates with private keys. Admins and CA users can only download certificate data (PEM format).");
+        }
+        
+        // Check if the certificate belongs to the user
         if (!hasAccessToCertificate(certificate, user)) {
             throw new RuntimeException("Access denied to certificate. User " + userId + " does not have permission to download certificate " + request.getCertificateSerialNumber());
         }
@@ -1393,10 +1523,19 @@ public class CertificateService {
         try {
             System.out.println("DEBUG: Starting PKCS12 generation for certificate " + request.getCertificateSerialNumber() + " for user " + userId);
             
-            // Decrypt the private key using the user's key
-            System.out.println("DEBUG: Getting user key for user " + userId);
-            byte[] userKey = userKeyService.getUserKey(userId);
-            System.out.println("DEBUG: Retrieved user key, length: " + userKey.length);
+            // Determine which user's key to use for decryption
+            // The private key was encrypted with the CA user's key (signedBy user who created/approved it)
+            User caUser = certificate.getSignedBy();
+            if (caUser == null) {
+                throw new RuntimeException("Certificate has no signer (signedBy is null). Cannot decrypt private key.");
+            }
+            
+            System.out.println("DEBUG: Certificate was created by user " + caUser.getId() + " (" + caUser.getEmail() + ")");
+            System.out.println("DEBUG: Getting user key for CA user (user " + caUser.getId() + ")");
+            
+            // Use the CA user's key to decrypt the private key
+            byte[] caUserKey = userKeyService.getUserKey(caUser.getId());
+            System.out.println("DEBUG: Retrieved CA user key, length: " + caUserKey.length);
             
             EncryptionService.EncryptedData encryptedData = new EncryptionService.EncryptedData(
                 Base64.getDecoder().decode(certificate.getEncryptedPrivateKey()),
@@ -1405,13 +1544,13 @@ public class CertificateService {
             );
             System.out.println("DEBUG: Created encrypted data object for private key decryption");
             
-            // Decrypt private key
+            // Decrypt private key using the CA user's key
             System.out.println("DEBUG: Calling encryption service to decrypt private key");
             java.security.PrivateKey privateKey = encryptionService.decryptPrivateKey(
                 encryptedData.getEncryptedData(),
                 encryptedData.getIv(),
                 encryptedData.getTag(),
-                Base64.getEncoder().encodeToString(userKey)
+                Base64.getEncoder().encodeToString(caUserKey)
             );
             System.out.println("DEBUG: Successfully decrypted private key");
             
@@ -1592,11 +1731,118 @@ public class CertificateService {
         // Set public key
         certificate.setPublicKey(convertPublicKeyToPEM(keyPair.getPublic()));
         
-        // Set certificate data (placeholder - would be actual X.509 certificate)
-        certificate.setEncodedValue("placeholder_base64_encoded_certificate");
-        certificate.setCertificateData("-----BEGIN CERTIFICATE-----\nplaceholder\n-----END CERTIFICATE-----");
+        // Generate actual X.509 certificate
+        X509Certificate x509Certificate = generateX509Certificate(
+            keyPair, 
+            request, 
+            signingCert, 
+            signingUser,
+            certificate.getValidFrom(),
+            certificate.getValidTo()
+        );
+        
+        // Export certificate to PEM format
+        String certificatePEM = keystoreService.exportCertificateAsPEM(x509Certificate);
+        certificate.setCertificateData(certificatePEM);
+        
+        // Set encoded value (Base64 of DER)
+        try {
+            certificate.setEncodedValue(Base64.getEncoder().encodeToString(x509Certificate.getEncoded()));
+        } catch (java.security.cert.CertificateEncodingException e) {
+            throw new RuntimeException("Failed to encode certificate", e);
+        }
         
         return certificate;
+    }
+    
+    /**
+     * Generates an X.509 certificate based on the request parameters.
+     * 
+     * @param keyPair The key pair for the new certificate
+     * @param request The certificate request with subject information
+     * @param signingCert The signing certificate (null for self-signed root)
+     * @param signingUser The user creating the certificate
+     * @param validFrom Certificate validity start date
+     * @param validTo Certificate validity end date
+     * @return Generated X509Certificate
+     */
+    private X509Certificate generateX509Certificate(
+            KeyPair keyPair,
+            IssueCertificateRequestDTO request,
+            Certificate signingCert,
+            User signingUser,
+            LocalDateTime validFrom,
+            LocalDateTime validTo) {
+        
+        // Build subject DN
+        X500Name subjectDN = certificateGeneratorService.buildX500Name(
+            request.getCommonName(),
+            request.getOrganization(),
+            request.getOrganizationalUnit(),
+            null, // locality
+            null, // state
+            request.getCountry(),
+            request.getEmail()
+        );
+        
+        // Calculate validity days
+        int validityDays = (int) java.time.temporal.ChronoUnit.DAYS.between(validFrom, validTo);
+        
+        // Default key usage for end-entity certificates
+        List<String> keyUsage = java.util.Arrays.asList("digitalSignature", "keyEncipherment");
+        
+        X509Certificate x509Certificate;
+        
+        if (signingCert == null) {
+            // Self-signed root certificate
+            x509Certificate = certificateGeneratorService.generateRootCertificate(
+                keyPair,
+                subjectDN,
+                validityDays,
+                keyUsage,
+                null // pathLength
+            );
+        } else {
+            // Signed by another certificate (end-entity or intermediate)
+            // Build issuer DN from signing certificate
+            X500Name issuerDN = certificateGeneratorService.buildX500Name(
+                signingCert.getSubjectCN(),
+                signingCert.getSubjectO(),
+                signingCert.getSubjectOU(),
+                signingCert.getSubjectL(),
+                signingCert.getSubjectST(),
+                signingCert.getSubjectC(),
+                signingCert.getSubjectE()
+            );
+            
+            // Decrypt signing certificate's private key
+            byte[] signingUserKey = userKeyService.getUserKey(signingCert.getSignedBy().getId());
+            java.security.PrivateKey signingPrivateKey = encryptionService.decryptPrivateKey(
+                Base64.getDecoder().decode(signingCert.getEncryptedPrivateKey()),
+                Base64.getDecoder().decode(signingCert.getEncryptionIV()),
+                Base64.getDecoder().decode(signingCert.getEncryptionTag()),
+                Base64.getEncoder().encodeToString(signingUserKey)
+            );
+            
+            // Parse signing certificate's public key
+            java.security.PublicKey signingPublicKey = parsePublicKeyFromPEM(signingCert.getPublicKey());
+            
+            // Generate end-entity certificate
+            x509Certificate = certificateGeneratorService.generateEndEntityCertificate(
+                keyPair,
+                subjectDN,
+                issuerDN,
+                signingPrivateKey,
+                signingPublicKey,
+                validityDays,
+                keyUsage,
+                null, // extendedKeyUsage
+                null, // subjectAlternativeNames
+                null  // crlDistributionPoint
+            );
+        }
+        
+        return x509Certificate;
     }
     
     /**
@@ -1641,10 +1887,7 @@ public class CertificateService {
         }
     }
 
-    private byte[] generatePkcs12File(Certificate certificate, String password) {
-        // Placeholder implementation - would generate actual PKCS#12 file
-        return ("PKCS#12 file for certificate " + certificate.getSerialNumber() + " with password " + password).getBytes();
-    }
+
 
     /**
      * Converts certificate to DTO with status - matches other back-end's CertificateResponse.CreateDto logic.

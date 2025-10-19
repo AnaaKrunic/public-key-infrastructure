@@ -38,12 +38,13 @@ export class CertificateRequestsService {
   }
 
   // Approve certificate request
-  approveCertificateRequest(requestId: string, validityDays: number, templateId?: number): Observable<any> {
-    return this.http.post(`${this.API_BASE_URL}/csr/approve`, {
+  approveCertificateRequest(requestId: string, validityDays: number, approvalData?: any): Observable<any> {
+    const requestBody = {
       requestId,
       validityDays,
-      templateId
-    });
+      ...(approvalData || {})
+    };
+    return this.http.post(`${this.API_BASE_URL}/csr/approve`, requestBody);
   }
 
   // Reject certificate request

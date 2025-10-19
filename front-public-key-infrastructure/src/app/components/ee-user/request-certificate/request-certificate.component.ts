@@ -85,7 +85,7 @@ import { ExtendedKeyUsageValue } from '../../../models/ExtendedKeyUsageValue';
               class="form-control">
               <option value="">Select Signing Certificate</option>
               <option *ngFor="let cert of signingCertificates" [value]="cert.serialNumber">
-                {{ cert.issuedTo }} ({{ cert.serialNumber }})
+                {{ cert.commonName }} - {{ cert.organization }} - {{ cert.organizationalUnit }} - {{ cert.serialNumber }}
               </option>
             </select>
           </div>
@@ -112,13 +112,13 @@ import { ExtendedKeyUsageValue } from '../../../models/ExtendedKeyUsageValue';
               <div class="upload-content">
                 <div class="upload-icon">🔐</div>
                 <p class="upload-text">Drag 'n' drop private key here, or click to select the file.</p>
-                <p class="upload-hint">Supported: .p12, .pfx</p>
+                <p class="upload-hint">Supported: .pem, .key (PKCS#8 format)</p>
                 <div *ngIf="privateKeyFileName" class="selected-file">
                   <span>{{ privateKeyFileName }}</span>
                   <button type="button" (click)="removeFile($event, 'privateKey')" class="remove-file-btn">×</button>
                 </div>
               </div>
-              <input type="file" #privateKeyFileInput accept=".p12,.pfx" hidden (change)="onFileChosen($event, 'privateKey')" name="privateKeyFile" required>
+              <input type="file" #privateKeyFileInput accept=".pem,.key" hidden (change)="onFileChosen($event, 'privateKey')" name="privateKeyFile" required>
             </div>
           </div>
 
@@ -158,8 +158,7 @@ import { ExtendedKeyUsageValue } from '../../../models/ExtendedKeyUsageValue';
               class="form-control">
               <option value="">Select Signing Certificate</option>
               <option *ngFor="let cert of signingCertificates" [value]="cert.serialNumber">
-                {{ cert.issuedTo }} ({{ cert.serialNumber }})
-              </option>
+              {{ cert.commonName }} - {{ cert.organization }} - {{ cert.organizationalUnit }} - {{ cert.serialNumber }}              </option>
             </select>
           </div>
 
@@ -256,21 +255,6 @@ import { ExtendedKeyUsageValue } from '../../../models/ExtendedKeyUsageValue';
                 </select>
               </div>
               
-              <div class="form-group" *ngIf="ext.key === 'subjectAlternativeNames'">
-                <label>Subject Alternative Names</label>
-                <div class="chip-container">
-                  <div class="chip" *ngFor="let san of ext.value; let j = index">
-                    {{ san }}
-                    <button type="button" (click)="removeSan(ext, san)" class="chip-remove">×</button>
-                  </div>
-                </div>
-                <input 
-                  type="text" 
-                  placeholder="Add SAN" 
-                  (keyup.enter)="addSan(ext, $event)" 
-                  class="form-control">
-              </div>
-              
               <div class="form-group" *ngIf="ext.key === 'keyUsage'">
                 <label>Key Usage</label>
                 <select [(ngModel)]="ext.value" name="extValue{{i}}" multiple class="form-control">
@@ -287,6 +271,94 @@ import { ExtendedKeyUsageValue } from '../../../models/ExtendedKeyUsageValue';
                     {{ usage.label }}
                   </option>
                 </select>
+              </div>
+
+              <div class="form-group" *ngIf="ext.key === 'subjectAlternativeNames'">
+                <label>Subject Alternative Names</label>
+                <div class="chip-container">
+                  <div class="chip" *ngFor="let san of ext.value; let j = index">
+                    {{ san }}
+                    <button type="button" (click)="removeSan(ext, san)" class="chip-remove">×</button>
+                  </div>
+                </div>
+                <input 
+                  type="text" 
+                  placeholder="Add SAN (e.g., example.com)" 
+                  (keyup.enter)="addSan(ext, $event)" 
+                  class="form-control">
+              </div>
+
+              <div class="form-group" *ngIf="ext.key === 'issuerAlternativeNames'">
+                <label>Issuer Alternative Names</label>
+                <div class="chip-container">
+                  <div class="chip" *ngFor="let ian of ext.value; let j = index">
+                    {{ ian }}
+                    <button type="button" (click)="removeSan(ext, ian)" class="chip-remove">×</button>
+                  </div>
+                </div>
+                <input 
+                  type="text" 
+                  placeholder="Add IAN (e.g., issuer.example.com)" 
+                  (keyup.enter)="addSan(ext, $event)" 
+                  class="form-control">
+              </div>
+
+              <div class="form-group" *ngIf="ext.key === 'nameConstraints'">
+                <label>Name Constraints</label>
+                <input 
+                  type="text" 
+                  [(ngModel)]="ext.value" 
+                  name="extValue{{i}}" 
+                  placeholder="e.g., .example.com"
+                  class="form-control">
+                <small class="form-hint">Specify permitted/excluded subtrees</small>
+              </div>
+
+              <div class="form-group" *ngIf="ext.key === 'basicConstraints'">
+                <label>Basic Constraints</label>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>Is CA</label>
+                    <select [(ngModel)]="ext.value.isCa" name="extValueIsCa{{i}}" class="form-control">
+                      <option [value]="true">Yes</option>
+                      <option [value]="false">No</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label>Path Length</label>
+                    <input 
+                      type="number" 
+                      [(ngModel)]="ext.value.pathLen" 
+                      name="extValuePathLen{{i}}" 
+                      placeholder="Path length constraint"
+                      min="0"
+                      class="form-control">
+                  </div>
+                </div>
+              </div>
+
+              <div class="form-group" *ngIf="ext.key === 'certificatePolicy'">
+                <label>Certificate Policy</label>
+                <input 
+                  type="text" 
+                  [(ngModel)]="ext.value.policyIdentifier" 
+                  name="extValuePolicyId{{i}}" 
+                  placeholder="Policy Identifier (OID)"
+                  class="form-control">
+                <input 
+                  type="text" 
+                  [(ngModel)]="ext.value.cpsUri" 
+                  name="extValueCpsUri{{i}}" 
+                  placeholder="CPS URI (optional)"
+                  class="form-control"
+                  style="margin-top: 10px;">
+                <input 
+                  type="text" 
+                  [(ngModel)]="ext.value.userNotice" 
+                  name="extValueUserNotice{{i}}" 
+                  placeholder="User Notice (optional)"
+                  class="form-control"
+                  style="margin-top: 10px;">
               </div>
               
               <button type="button" (click)="removeExtension(i)" class="btn btn-sm btn-danger remove-btn">
@@ -567,6 +639,13 @@ import { ExtendedKeyUsageValue } from '../../../models/ExtendedKeyUsageValue';
       font-size: 12px;
     }
 
+    .form-hint {
+      display: block;
+      font-size: 12px;
+      color: #6c757d;
+      margin-top: 5px;
+    }
+
     .error {
       color: #dc3545;
       background-color: #f8d7da;
@@ -674,12 +753,12 @@ export class RequestCertificateComponent implements OnInit {
   }
 
   loadSigningCertificates() {
-    this.certificatesService.getAllValidSigningCertificates().subscribe({
+    this.certificatesService.getAllCACertificates().subscribe({
       next: (certificates) => {
         this.signingCertificates = certificates;
       },
       error: (error) => {
-        console.error('Error loading signing certificates:', error);
+        console.error('Error loading CA certificates:', error);
         this.toastr.error('Error loading signing certificates');
       }
     });
@@ -798,10 +877,10 @@ export class RequestCertificateComponent implements OnInit {
       keyUsage: this.getKeyUsageValues(),
       extendedKeyUsage: this.getExtendedKeyUsageValues(),
       subjectAlternativeNames: this.getSubjectAlternativeNames(),
-      issuerAlternativeNames: [],
-      nameConstraints: '',
-      basicConstraints: '',
-      certificatePolicy: ''
+      issuerAlternativeNames: this.getIssuerAlternativeNames(),
+      nameConstraints: this.getNameConstraints(),
+      basicConstraints: this.getBasicConstraints(),
+      certificatePolicy: this.getCertificatePolicy()
     };
 
     this.certificateRequestsService.createFormBasedCSR(request).subscribe({
@@ -834,14 +913,26 @@ export class RequestCertificateComponent implements OnInit {
   getAvailableKeys(ext: any) {
     const usedKeys = this.extensions.map(e => e.key).filter(k => k !== ext.key);
     return [
-      { value: 'subjectAlternativeNames', label: 'Subject Alternative Names' },
       { value: 'keyUsage', label: 'Key Usage' },
-      { value: 'extendedKeyUsage', label: 'Extended Key Usage' }
+      { value: 'extendedKeyUsage', label: 'Extended Key Usage' },
+      { value: 'subjectAlternativeNames', label: 'Subject Alternative Names' },
+      { value: 'issuerAlternativeNames', label: 'Issuer Alternative Names' },
+      { value: 'nameConstraints', label: 'Name Constraints' },
+      { value: 'basicConstraints', label: 'Basic Constraints' },
+      { value: 'certificatePolicy', label: 'Certificate Policy' }
     ].filter(key => !usedKeys.includes(key.value));
   }
 
   clearExtensionValue(ext: any) {
-    ext.value = [];
+    if (ext.key === 'basicConstraints') {
+      ext.value = { isCa: false, pathLen: null };
+    } else if (ext.key === 'certificatePolicy') {
+      ext.value = { policyIdentifier: '', cpsUri: '', userNotice: '' };
+    } else if (ext.key === 'nameConstraints') {
+      ext.value = '';
+    } else {
+      ext.value = [];
+    }
   }
 
   // SAN methods
@@ -874,6 +965,33 @@ export class RequestCertificateComponent implements OnInit {
   getSubjectAlternativeNames(): string[] {
     const sanExt = this.extensions.find(ext => ext.key === 'subjectAlternativeNames');
     return sanExt ? sanExt.value : [];
+  }
+
+  getIssuerAlternativeNames(): string[] {
+    const ianExt = this.extensions.find(ext => ext.key === 'issuerAlternativeNames');
+    return ianExt ? ianExt.value : [];
+  }
+
+  getNameConstraints(): string {
+    const ncExt = this.extensions.find(ext => ext.key === 'nameConstraints');
+    return ncExt ? ncExt.value : '';
+  }
+
+  getBasicConstraints(): string {
+    const bcExt = this.extensions.find(ext => ext.key === 'basicConstraints');
+    if (bcExt && bcExt.value) {
+      const bc = bcExt.value;
+      return JSON.stringify({ isCa: bc.isCa, pathLen: bc.pathLen });
+    }
+    return '';
+  }
+
+  getCertificatePolicy(): string {
+    const cpExt = this.extensions.find(ext => ext.key === 'certificatePolicy');
+    if (cpExt && cpExt.value) {
+      return JSON.stringify(cpExt.value);
+    }
+    return '';
   }
 
   onCountryInput(event: any) {

@@ -6,9 +6,7 @@ import { MatProgressSpinner } from '@angular/material/progress-spinner';
 import { CertificatesService } from '../../../services/certificates/certificates.service';
 import { DialogService } from '../../../services/dialog/dialog.service';
 import { Certificate } from '../../../models/Certificate';
-import { DownloadCertificateRequest } from '../../../models/DownloadCertificateRequest';
 import { CertificateDetailsDialogComponent } from '../../common/certificate-details-dialog/certificate-details-dialog.component';
-import { DownloadCertificatePwDialogComponent } from '../../common/download-certificate-pw-dialog/download-certificate-pw-dialog.component';
 
 @Component({
   selector: 'app-signed-certificates',
@@ -505,40 +503,13 @@ export class SignedCertificatesComponent implements OnInit {
   }
 
   downloadCertificate(certificate: Certificate): void {
-    const dialogRef = this.dialog.open(DownloadCertificatePwDialogComponent, {
-      width: '600px',
-      maxWidth: '90vw',
-      maxHeight: '90vh',
-      data: { certificate: certificate },
-      hasBackdrop: true,
-      disableClose: false
-    });
-
-    dialogRef.afterClosed().subscribe(password => {
-      // Trigger cleanup after dialog closes
-      setTimeout(() => this.dialogService.cleanupOverlays(), 100);
-      
-      if (password) {
-        const downloadRequest: DownloadCertificateRequest = {
-          certificateSerialNumber: certificate.serialNumber,
-          password: password
-        };
-
-        this.certificatesService.downloadCertificate(downloadRequest).subscribe({
-          next: (blob) => {
-            const url = window.URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = `certificate_${certificate.serialNumber}.pfx`;
-            link.click();
-            window.URL.revokeObjectURL(url);
-          },
-          error: (err) => {
-            console.error('Error downloading certificate:', err);
-            alert('Failed to download certificate');
-          }
-        });
-      }
-    });
+    // CA users can only download PEM format (no private keys)
+    const blob = new Blob([certificate.certificateData || ''], { type: 'application/x-pem-file' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `certificate_${certificate.serialNumber}.pem`;
+    link.click();
+    window.URL.revokeObjectURL(url);
   }
 }

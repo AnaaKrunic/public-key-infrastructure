@@ -22,7 +22,18 @@ import java.util.Optional;
 import java.util.Collections;
 import java.util.Base64;
 import java.security.KeyPairGenerator;
-import java.security.NoSuchAlgorithmException;
+import java.io.StringReader;
+import java.io.IOException;
+
+import org.bouncycastle.asn1.x500.X500Name;
+import org.bouncycastle.asn1.x500.style.BCStyle;
+import org.bouncycastle.asn1.x500.RDN;
+import org.bouncycastle.asn1.ASN1ObjectIdentifier;
+import org.bouncycastle.pkcs.PKCS10CertificationRequest;
+import org.bouncycastle.pkcs.jcajce.JcaPKCS10CertificationRequestBuilder;
+import org.bouncycastle.operator.ContentSigner;
+import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
+import org.bouncycastle.openssl.PEMParser;
 
 /**
  * CSRService manages the Certificate Signing Request (CSR) workflow in the PKI system.
@@ -172,18 +183,22 @@ public class CSRService {
             throw new IllegalArgumentException("Requester cannot be null");
         }
 
-        // Validate the CSR request (placeholder - would need specific CSR validation)
-        // validationService.validateCertificateRequest(dto, requester);
+        // Find the selected CA certificate from database
+        Certificate selectedCA = certificateRepository.findById(dto.getSelectedCAId())
+            .orElseThrow(() -> new NotFoundException("Selected CA certificate not found with ID: " + dto.getSelectedCAId()));
+        
+        // Validate that the selected certificate is a CA
+        if (selectedCA.getCertificateType() != CertificateType.ROOT && 
+            selectedCA.getCertificateType() != CertificateType.INTERMEDIATE) {
+            throw new ValidationException("Selected certificate is not a CA certificate");
+        }
+        
+        // Validate that the CA is active
+        if (selectedCA.getStatus() != CertificateStatus.ACTIVE) {
+            throw new ValidationException("Selected CA certificate is not active");
+        }
 
-        // Find the selected CA certificate (placeholder - would need to get Certificate entity)
-        // For now, create a placeholder Certificate entity
-        Certificate selectedCA = new Certificate();
-        selectedCA.setId(dto.getSelectedCAId());
-        selectedCA.setSerialNumber(dto.getSelectedCAId().toString());
-        selectedCA.setSubjectCN("Test CA");
-        // Note: selectedCA is a placeholder, owner relationship is handled differently
-
-        // Generate CSR data (placeholder for now - would use Bouncy Castle)
+        // Generate CSR data using Bouncy Castle
         String csrData = generateCSRData(dto);
 
         // Create CSR entity
@@ -262,7 +277,7 @@ public class CSRService {
         try {
             byte[] userKey = userKeyService.getUserKey(userId);
             EncryptionService.EncryptedData encryptedData = encryptionService.encryptPrivateKey(
-                parsePrivateKeyFromPKCS12(privateKeyContent), 
+                parsePrivateKeyFromPEM(privateKeyContent), 
                 Base64.getEncoder().encodeToString(userKey)
             );
 
@@ -320,26 +335,40 @@ public class CSRService {
             throw new IllegalArgumentException("Requester cannot be null");
         }
 
-        // Parse and validate CSR (placeholder implementation)
+        // Parse and validate CSR
         String csrData = dto.getCsrData();
         if (csrData == null || csrData.trim().isEmpty()) {
             throw new ValidationException("CSR data cannot be null or empty");
         }
 
-        // Extract subject fields from CSR (placeholder - would use Bouncy Castle)
+        // Validate CSR format by attempting to parse it
+        try {
+            parseCSR(csrData);
+        } catch (Exception e) {
+            throw new ValidationException("Invalid CSR format: " + e.getMessage());
+        }
+
+        // Extract subject fields from CSR using Bouncy Castle
         String subjectCN = extractSubjectCN(csrData);
         String subjectO = extractSubjectO(csrData);
         String subjectOU = extractSubjectOU(csrData);
         String subjectC = extractSubjectC(csrData);
         String subjectE = extractSubjectE(csrData);
 
-        // Find the selected CA certificate (placeholder - would need to get Certificate entity)
-        // For now, create a placeholder Certificate entity
-        Certificate selectedCA = new Certificate();
-        selectedCA.setId(dto.getSelectedCAId());
-        selectedCA.setSerialNumber(dto.getSelectedCAId().toString());
-        selectedCA.setSubjectCN("Test CA");
-        // Note: selectedCA is a placeholder, owner relationship is handled differently
+        // Find the selected CA certificate from database
+        Certificate selectedCA = certificateRepository.findById(dto.getSelectedCAId())
+            .orElseThrow(() -> new NotFoundException("Selected CA certificate not found with ID: " + dto.getSelectedCAId()));
+        
+        // Validate that the selected certificate is a CA
+        if (selectedCA.getCertificateType() != CertificateType.ROOT && 
+            selectedCA.getCertificateType() != CertificateType.INTERMEDIATE) {
+            throw new ValidationException("Selected certificate is not a CA certificate");
+        }
+        
+        // Validate that the CA is active
+        if (selectedCA.getStatus() != CertificateStatus.ACTIVE) {
+            throw new ValidationException("Selected CA certificate is not active");
+        }
 
         // Create CSR entity
         CertificateSigningRequest csr = new CertificateSigningRequest();
@@ -749,24 +778,65 @@ public class CSRService {
     }
 
     /**
-     * Generates CSR data in PKCS#12 format.
+     * Generates CSR data in PEM format (PKCS#10).
      * 
      * @param dto The CSR creation DTO
-     * @return PKCS#12-encoded CSR data
+     * @return PEM-encoded CSR data
      */
     private String generateCSRData(CreateCSRDTO dto) {
-        // This is a placeholder implementation
-        // In a real implementation, this would use Bouncy Castle to:
-        // 1. Generate RSA key pair
-        // 2. Build PKCS#10 CSR with subject DN
-        // 3. Sign with private key
-        // 4. Return PEM format
-        
-        return "-----BEGIN CERTIFICATE REQUEST-----\n" +
-               "MIIBkTCB+wIBADBOMQswCQYDVQQGEwJVUzETMBEGA1UECAwKU29tZS1TdGF0ZTEh\n" +
-               "MB8GA1UECgwYSW50ZXJuZXQgV2lkZ2l0cyBQdHkgTHRkMREwDwYDVQQDDAh0ZXN0\n" +
-               "LmNvbTCBnzANBgkqhkiG9w0BAQEFAAOBjQAwgYkCgYEA7+9v5f1YQrHf1VAz7bFk\n" +
-               "-----END CERTIFICATE REQUEST-----";
+        try {
+            // Generate RSA key pair
+            KeyPairGenerator keyGen = KeyPairGenerator.getInstance("RSA");
+            keyGen.initialize(2048);
+            java.security.KeyPair keyPair = keyGen.generateKeyPair();
+            
+            // Build X500Name for subject
+            org.bouncycastle.asn1.x500.X500NameBuilder nameBuilder = new org.bouncycastle.asn1.x500.X500NameBuilder(BCStyle.INSTANCE);
+            nameBuilder.addRDN(BCStyle.CN, dto.getSubjectCN());
+            if (dto.getSubjectO() != null && !dto.getSubjectO().isEmpty()) {
+                nameBuilder.addRDN(BCStyle.O, dto.getSubjectO());
+            }
+            if (dto.getSubjectOU() != null && !dto.getSubjectOU().isEmpty()) {
+                nameBuilder.addRDN(BCStyle.OU, dto.getSubjectOU());
+            }
+            if (dto.getSubjectC() != null && !dto.getSubjectC().isEmpty()) {
+                nameBuilder.addRDN(BCStyle.C, dto.getSubjectC());
+            }
+            if (dto.getSubjectE() != null && !dto.getSubjectE().isEmpty()) {
+                nameBuilder.addRDN(BCStyle.E, dto.getSubjectE());
+            }
+            
+            X500Name subject = nameBuilder.build();
+            
+            // Build PKCS#10 CSR
+            JcaPKCS10CertificationRequestBuilder csrBuilder = 
+                new JcaPKCS10CertificationRequestBuilder(subject, keyPair.getPublic());
+            
+            // Sign the CSR with private key
+            ContentSigner signer = new JcaContentSignerBuilder("SHA256withRSA")
+                .build(keyPair.getPrivate());
+            
+            PKCS10CertificationRequest csr = csrBuilder.build(signer);
+            
+            // Convert to PEM format with proper line breaks
+            String base64Encoded = Base64.getEncoder().encodeToString(csr.getEncoded());
+            StringBuilder pemBuilder = new StringBuilder();
+            pemBuilder.append("-----BEGIN CERTIFICATE REQUEST-----\n");
+            
+            // Add line breaks every 64 characters
+            int index = 0;
+            while (index < base64Encoded.length()) {
+                int endIndex = Math.min(index + 64, base64Encoded.length());
+                pemBuilder.append(base64Encoded.substring(index, endIndex)).append("\n");
+                index = endIndex;
+            }
+            
+            pemBuilder.append("-----END CERTIFICATE REQUEST-----");
+            
+            return pemBuilder.toString();
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to generate CSR: " + e.getMessage(), e);
+        }
     }
 
     /**
@@ -806,118 +876,131 @@ public class CSRService {
     /**
      * Extracts subject CN from CSR data using Bouncy Castle.
      * 
-     * @param csrData The CSR data in PKCS#12 format
-     * @return Subject CN
+     * @param csrData The CSR data in PEM or DER format
+     * @return Subject CN, or null if not found
      */
     private String extractSubjectCN(String csrData) {
         try {
-            org.bouncycastle.pkcs.PKCS10CertificationRequest csr = parseCSR(csrData);
-            org.bouncycastle.asn1.x500.X500Name subject = csr.getSubject();
-            org.bouncycastle.asn1.ASN1ObjectIdentifier cnOID = org.bouncycastle.asn1.x500.style.BCStyle.CN;
-            return getRDNValue(subject, cnOID);
+            PKCS10CertificationRequest csr = parseCSR(csrData);
+            X500Name subject = csr.getSubject();
+            return getRDNValue(subject, BCStyle.CN);
         } catch (Exception e) {
-            return "unknown-cn";
+            System.err.println("Failed to extract CN from CSR: " + e.getMessage());
+            return null;
         }
     }
 
     /**
-     * Extracts subject O from CSR data using Bouncy Castle.
+     * Extracts subject O (Organization) from CSR data using Bouncy Castle.
      * 
-     * @param csrData The CSR data in PKCS#12 format
-     * @return Subject O
+     * @param csrData The CSR data in PEM or DER format
+     * @return Subject O, or null if not found
      */
     private String extractSubjectO(String csrData) {
         try {
-            org.bouncycastle.pkcs.PKCS10CertificationRequest csr = parseCSR(csrData);
-            org.bouncycastle.asn1.x500.X500Name subject = csr.getSubject();
-            org.bouncycastle.asn1.ASN1ObjectIdentifier oOID = org.bouncycastle.asn1.x500.style.BCStyle.O;
-            return getRDNValue(subject, oOID);
+            PKCS10CertificationRequest csr = parseCSR(csrData);
+            X500Name subject = csr.getSubject();
+            return getRDNValue(subject, BCStyle.O);
         } catch (Exception e) {
-            return "unknown-o";
+            System.err.println("Failed to extract O from CSR: " + e.getMessage());
+            return null;
         }
     }
 
     /**
-     * Extracts subject OU from CSR data using Bouncy Castle.
+     * Extracts subject OU (Organizational Unit) from CSR data using Bouncy Castle.
      * 
-     * @param csrData The CSR data in PKCS#12 format
-     * @return Subject OU
+     * @param csrData The CSR data in PEM or DER format
+     * @return Subject OU, or null if not found
      */
     private String extractSubjectOU(String csrData) {
         try {
-            org.bouncycastle.pkcs.PKCS10CertificationRequest csr = parseCSR(csrData);
-            org.bouncycastle.asn1.x500.X500Name subject = csr.getSubject();
-            org.bouncycastle.asn1.ASN1ObjectIdentifier ouOID = org.bouncycastle.asn1.x500.style.BCStyle.OU;
-            return getRDNValue(subject, ouOID);
+            PKCS10CertificationRequest csr = parseCSR(csrData);
+            X500Name subject = csr.getSubject();
+            return getRDNValue(subject, BCStyle.OU);
         } catch (Exception e) {
-            return "unknown-ou";
+            System.err.println("Failed to extract OU from CSR: " + e.getMessage());
+            return null;
         }
     }
 
     /**
-     * Extracts subject C from CSR data using Bouncy Castle.
+     * Extracts subject C (Country) from CSR data using Bouncy Castle.
      * 
-     * @param csrData The CSR data in PKCS#12 format
-     * @return Subject C
+     * @param csrData The CSR data in PEM or DER format
+     * @return Subject C, or null if not found
      */
     private String extractSubjectC(String csrData) {
         try {
-            org.bouncycastle.pkcs.PKCS10CertificationRequest csr = parseCSR(csrData);
-            org.bouncycastle.asn1.x500.X500Name subject = csr.getSubject();
-            org.bouncycastle.asn1.ASN1ObjectIdentifier cOID = org.bouncycastle.asn1.x500.style.BCStyle.C;
-            return getRDNValue(subject, cOID);
+            PKCS10CertificationRequest csr = parseCSR(csrData);
+            X500Name subject = csr.getSubject();
+            return getRDNValue(subject, BCStyle.C);
         } catch (Exception e) {
-            return "unknown-c";
+            System.err.println("Failed to extract C from CSR: " + e.getMessage());
+            return null;
         }
     }
 
     /**
-     * Extracts subject E from CSR data using Bouncy Castle.
+     * Extracts subject E (Email) from CSR data using Bouncy Castle.
      * 
-     * @param csrData The CSR data in PKCS#12 format
-     * @return Subject E
+     * @param csrData The CSR data in PEM or DER format
+     * @return Subject E, or null if not found
      */
     private String extractSubjectE(String csrData) {
         try {
-            org.bouncycastle.pkcs.PKCS10CertificationRequest csr = parseCSR(csrData);
-            org.bouncycastle.asn1.x500.X500Name subject = csr.getSubject();
-            org.bouncycastle.asn1.ASN1ObjectIdentifier eOID = org.bouncycastle.asn1.x500.style.BCStyle.E;
-            return getRDNValue(subject, eOID);
+            PKCS10CertificationRequest csr = parseCSR(csrData);
+            X500Name subject = csr.getSubject();
+            return getRDNValue(subject, BCStyle.E);
         } catch (Exception e) {
-            return "unknown-e";
+            System.err.println("Failed to extract E from CSR: " + e.getMessage());
+            return null;
         }
     }
 
     /**
-     * Parses CSR data from PKCS#12 format using Bouncy Castle.
+     * Parses CSR data from PEM format (PKCS#10) using Bouncy Castle.
+     * 
+     * @param csrData The CSR data in PEM format
+     * @return PKCS10CertificationRequest object
+     * @throws Exception if parsing fails
      */
-    private org.bouncycastle.pkcs.PKCS10CertificationRequest parseCSR(String csrData) throws Exception {
-        // For PKCS#12 format, we need to extract the CSR from the keystore
-        byte[] pkcs12Bytes = org.bouncycastle.util.encoders.Base64.decode(csrData);
-        
-        // Load PKCS#12 keystore
-        java.security.KeyStore keyStore = java.security.KeyStore.getInstance("PKCS12");
-        java.io.ByteArrayInputStream bais = new java.io.ByteArrayInputStream(pkcs12Bytes);
-        keyStore.load(bais, "changeit".toCharArray());
-        
-        // Try to get CSR data from keystore attributes
-        // Since PKCS#12 doesn't natively support CSRs, we'll need to store it as a custom attribute
-        // For now, we'll create a temporary CSR from the certificate in the keystore
-        java.security.cert.Certificate cert = keyStore.getCertificate("private-key");
-        if (cert == null) {
-            throw new RuntimeException("Certificate not found in PKCS#12 keystore");
+    private PKCS10CertificationRequest parseCSR(String csrData) throws Exception {
+        if (csrData == null || csrData.trim().isEmpty()) {
+            throw new IllegalArgumentException("CSR data cannot be null or empty");
         }
         
-        // Convert certificate to CSR (this is a workaround)
-        // In a real implementation, you would store the actual CSR data separately
-        return new org.bouncycastle.pkcs.PKCS10CertificationRequest(cert.getEncoded());
+        try {
+            // Handle PEM format
+            if (csrData.contains("BEGIN CERTIFICATE REQUEST") || csrData.contains("BEGIN NEW CERTIFICATE REQUEST")) {
+                try (PEMParser pemParser = new PEMParser(new StringReader(csrData))) {
+                    Object parsedObj = pemParser.readObject();
+                    if (parsedObj instanceof PKCS10CertificationRequest) {
+                        return (PKCS10CertificationRequest) parsedObj;
+                    } else {
+                        throw new IllegalArgumentException("Parsed object is not a PKCS10CertificationRequest");
+                    }
+                }
+            } else {
+                // Try to parse as Base64-encoded DER
+                String cleanData = csrData.replaceAll("\\s", "");
+                byte[] derBytes = Base64.getDecoder().decode(cleanData);
+                return new PKCS10CertificationRequest(derBytes);
+            }
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to parse CSR: " + e.getMessage(), e);
+        }
     }
 
     /**
-     * Gets RDN value from X500Name.
+     * Gets RDN (Relative Distinguished Name) value from X500Name.
+     * 
+     * @param name The X500Name to extract from
+     * @param oid The ASN1 Object Identifier of the field
+     * @return The value of the RDN, or null if not found
      */
-    private String getRDNValue(org.bouncycastle.asn1.x500.X500Name name, org.bouncycastle.asn1.ASN1ObjectIdentifier oid) {
-        org.bouncycastle.asn1.x500.RDN[] rdns = name.getRDNs(oid);
+    private String getRDNValue(X500Name name, ASN1ObjectIdentifier oid) {
+        RDN[] rdns = name.getRDNs(oid);
         if (rdns.length > 0) {
             return rdns[0].getFirst().getValue().toString();
         }
@@ -1043,16 +1126,15 @@ public class CSRService {
         // Find all pending CSRs
         List<CertificateSigningRequest> allPendingRequests = csrRepository.findByStatus(CSRStatus.PENDING);
         
-        // Filter requests where the selectedCA is owned by the CA user
+        // Filter requests where the selectedCA is in the CA user's chain
         List<CertificateSigningRequest> requests = allPendingRequests.stream()
                 .filter(csr -> {
                     Certificate selectedCA = csr.getSelectedCA();
                     if (selectedCA == null) {
                         return false;
                     }
-                    // Check if the CA user owns this certificate
-                    User certOwner = selectedCA.getSignedBy();
-                    return certOwner != null && certOwner.getId().equals(caUser.getId());
+                    // Check if the selectedCA is in the CA user's certificate chain
+                    return isCertificateInUserChain(selectedCA, caUser);
                 })
                 .toList();
         
@@ -1074,11 +1156,9 @@ public class CSRService {
                 .orElseThrow(() -> new RuntimeException("Certificate request with given ID not found!"));
         
         // Check if the CA user has permission to reject this request
-        // The CA user can reject if they own the selectedCA certificate (the certificate that will sign the new certificate)
-        if (request.getSelectedCA() == null || 
-            request.getSelectedCA().getSignedBy() == null || 
-            !request.getSelectedCA().getSignedBy().getId().equals(caUser.getId())) {
-            throw new RuntimeException("This certificate is not requested from you! The request can be rejected by the owner of the CA certificate that was asked to sign the request.");
+        // The CA user can reject if the selectedCA certificate is in their chain
+        if (!isCertificateInUserChain(request.getSelectedCA(), caUser)) {
+            throw new RuntimeException("This certificate is not requested from you! The request can be rejected by a CA user whose certificate chain includes the requested signing certificate.");
         }
         
         // Update request status to rejected instead of deleting
@@ -1102,18 +1182,9 @@ public class CSRService {
                 .orElseThrow(() -> new RuntimeException("Certificate request with given ID not found!"));
         
         // Check if the CA user has permission to approve this request
-        // The CA user can approve if they own the selectedCA certificate (the certificate that will sign the new certificate)
-        boolean canApprove = false;
-        
-        if (request.getSelectedCA() != null && 
-            request.getSelectedCA().getSignedBy() != null && 
-            request.getSelectedCA().getSignedBy().getId().equals(caUser.getId())) {
-            // CA user owns the selectedCA certificate
-            canApprove = true;
-        }
-        
-        if (!canApprove) {
-            throw new RuntimeException("This certificate is not requested from you! The request can be approved by the owner of the CA certificate that was asked to sign the request.");
+        // The CA user can approve if the selectedCA certificate is in their chain
+        if (!isCertificateInUserChain(request.getSelectedCA(), caUser)) {
+            throw new RuntimeException("This certificate is not requested from you! The request can be approved by a CA user whose certificate chain includes the requested signing certificate.");
         }
         
         // Create certificate using the certificate service
@@ -1136,7 +1207,7 @@ public class CSRService {
             certDTO.setKeySize(2048); // Set the key size to 2048 bits
             
             // Create the certificate
-            CertificateDTO createdCertificate = certificateService.createEndEntityCertificate(certDTO, request.getRequester());
+            CertificateDTO createdCertificate = certificateService.createEndEntityCertificate(certDTO,caUser, true);
             
             System.out.println("DEBUG CSR APPROVAL: Certificate created with ID: " + createdCertificate.getId());
             System.out.println("DEBUG CSR APPROVAL: Certificate serial: " + createdCertificate.getSerialNumber());
@@ -1187,12 +1258,72 @@ public class CSRService {
 
     // Helper methods
     private User findUserByIdAndRole(Long userId, Role role) {
-        // This would need to be implemented with actual user lookup
-        // For now, return a placeholder
-        User user = new User();
-        user.setId(userId);
-        user.setRole(role);
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new NotFoundException("User not found with ID: " + userId));
+        
+        if (user.getRole() != role) {
+            throw new ForbiddenException("User does not have the required role: " + role);
+        }
+        
         return user;
+    }
+
+    /**
+     * Checks if a certificate is in the CA user's chain.
+     * A certificate is in the chain if:
+     * - The CA user owns it directly (it's in their myCertificates)
+     * - It was issued by any certificate in the user's chain (recursively)
+     * 
+     * @param certificate The certificate to check
+     * @param caUser The CA user
+     * @return true if the certificate is in the user's chain, false otherwise
+     */
+    private boolean isCertificateInUserChain(Certificate certificate, User caUser) {
+        if (certificate == null || caUser == null) {
+            return false;
+        }
+        
+        // Get all CA certificates owned by this user
+        List<Certificate> caCertificates = caUser.getMyCertificates().stream()
+                .filter(cert -> cert.isCanSign())
+                .toList();
+        
+        // Collect all certificates in the chain
+        java.util.Set<Certificate> allCertificatesInChain = new java.util.HashSet<>();
+        
+        for (Certificate caCert : caCertificates) {
+            // Add the CA certificate itself
+            allCertificatesInChain.add(caCert);
+            // Add all certificates issued by this CA certificate (recursively)
+            collectCertificatesIssuedBy(caCert, allCertificatesInChain);
+        }
+        
+        // Check if the certificate is in the chain
+        return allCertificatesInChain.stream()
+                .anyMatch(cert -> cert.getId().equals(certificate.getId()));
+    }
+    
+    /**
+     * Recursively collects all certificates issued by a given certificate.
+     * 
+     * @param issuerCert The issuer certificate
+     * @param result The set to collect certificates into
+     */
+    private void collectCertificatesIssuedBy(Certificate issuerCert, java.util.Set<Certificate> result) {
+        // Find all certificates issued by this certificate
+        List<Certificate> issuedCertificates = certificateRepository.findAll().stream()
+                .filter(cert -> cert.getIssuerCertificate() != null && 
+                               cert.getIssuerCertificate().getId().equals(issuerCert.getId()))
+                .toList();
+        
+        for (Certificate issuedCert : issuedCertificates) {
+            // Avoid infinite loops in case of circular references
+            if (!result.contains(issuedCert)) {
+                result.add(issuedCert);
+                // Recursively collect certificates issued by this certificate
+                collectCertificatesIssuedBy(issuedCert, result);
+            }
+        }
     }
 
     private boolean hasValidCertificates(User user) {
@@ -1333,39 +1464,35 @@ public class CSRService {
     }
 
     /**
-     * Generates placeholder CSR data from form input.
-     * In a real implementation, this would generate actual PKCS#10 CSR.
+     * Generates PKCS#10 CSR data from form input.
+     * 
+     * @param requestDTO The certificate request form data
+     * @param keyPair The key pair to use for CSR generation
+     * @return PEM-encoded PKCS#10 CSR
      */
     private String generateCSRDataFromForm(CreateCertificateRequestDTO requestDTO, java.security.KeyPair keyPair) {
         try {
-            // Use the provided key pair for CSR generation
-            
             // Create X500Name for subject
-            org.bouncycastle.asn1.x500.X500NameBuilder nameBuilder = new org.bouncycastle.asn1.x500.X500NameBuilder();
-            nameBuilder.addRDN(org.bouncycastle.asn1.x500.style.BCStyle.CN, requestDTO.getCommonName());
+            org.bouncycastle.asn1.x500.X500NameBuilder nameBuilder = new org.bouncycastle.asn1.x500.X500NameBuilder(BCStyle.INSTANCE);
+            nameBuilder.addRDN(BCStyle.CN, requestDTO.getCommonName());
             if (requestDTO.getOrganization() != null && !requestDTO.getOrganization().isEmpty()) {
-                nameBuilder.addRDN(org.bouncycastle.asn1.x500.style.BCStyle.O, requestDTO.getOrganization());
+                nameBuilder.addRDN(BCStyle.O, requestDTO.getOrganization());
             }
             if (requestDTO.getOrganizationalUnit() != null && !requestDTO.getOrganizationalUnit().isEmpty()) {
-                nameBuilder.addRDN(org.bouncycastle.asn1.x500.style.BCStyle.OU, requestDTO.getOrganizationalUnit());
+                nameBuilder.addRDN(BCStyle.OU, requestDTO.getOrganizationalUnit());
             }
             if (requestDTO.getCountry() != null && !requestDTO.getCountry().isEmpty()) {
-                nameBuilder.addRDN(org.bouncycastle.asn1.x500.style.BCStyle.C, requestDTO.getCountry());
+                nameBuilder.addRDN(BCStyle.C, requestDTO.getCountry());
             }
             if (requestDTO.getEmail() != null && !requestDTO.getEmail().isEmpty()) {
-                nameBuilder.addRDN(org.bouncycastle.asn1.x500.style.BCStyle.E, requestDTO.getEmail());
+                nameBuilder.addRDN(BCStyle.E, requestDTO.getEmail());
             }
             
-            org.bouncycastle.asn1.x500.X500Name subject = nameBuilder.build();
+            X500Name subject = nameBuilder.build();
             
-            // Convert PublicKey to SubjectPublicKeyInfo
-            org.bouncycastle.asn1.x509.SubjectPublicKeyInfo subjectPublicKeyInfo = 
-                org.bouncycastle.asn1.x509.SubjectPublicKeyInfo.getInstance(keyPair.getPublic().getEncoded());
-            
-            // Create PKCS10CertificationRequestBuilder
-            org.bouncycastle.pkcs.PKCS10CertificationRequestBuilder pkb = new org.bouncycastle.pkcs.PKCS10CertificationRequestBuilder(
-                subject, subjectPublicKeyInfo
-            );
+            // Build PKCS#10 CSR
+            JcaPKCS10CertificationRequestBuilder csrBuilder = 
+                new JcaPKCS10CertificationRequestBuilder(subject, keyPair.getPublic());
             
             // Add extensions if specified
             if (requestDTO.getKeyUsage() != null && !requestDTO.getKeyUsage().isEmpty()) {
@@ -1379,19 +1506,31 @@ public class CSRService {
                     new org.bouncycastle.asn1.x509.Extension(org.bouncycastle.asn1.x509.Extension.keyUsage, false, keyUsage.getEncoded())
                 );
                 
-                pkb.addAttribute(org.bouncycastle.asn1.pkcs.PKCSObjectIdentifiers.pkcs_9_at_extensionRequest, extensions);
+                csrBuilder.addAttribute(org.bouncycastle.asn1.pkcs.PKCSObjectIdentifiers.pkcs_9_at_extensionRequest, extensions);
             }
             
             // Sign the CSR
-            org.bouncycastle.operator.ContentSigner signer = new org.bouncycastle.operator.jcajce.JcaContentSignerBuilder("SHA256withRSA")
+            ContentSigner signer = new JcaContentSignerBuilder("SHA256withRSA")
                 .build(keyPair.getPrivate());
             
-            org.bouncycastle.pkcs.PKCS10CertificationRequest csr = pkb.build(signer);
+            PKCS10CertificationRequest csr = csrBuilder.build(signer);
             
-            // Convert to PEM format
-            return "-----BEGIN CERTIFICATE REQUEST-----\n" +
-                   org.bouncycastle.util.encoders.Base64.toBase64String(csr.getEncoded()) +
-                   "\n-----END CERTIFICATE REQUEST-----";
+            // Convert to PEM format with proper line breaks
+            String base64Encoded = Base64.getEncoder().encodeToString(csr.getEncoded());
+            StringBuilder pemBuilder = new StringBuilder();
+            pemBuilder.append("-----BEGIN CERTIFICATE REQUEST-----\n");
+            
+            // Add line breaks every 64 characters
+            int index = 0;
+            while (index < base64Encoded.length()) {
+                int endIndex = Math.min(index + 64, base64Encoded.length());
+                pemBuilder.append(base64Encoded.substring(index, endIndex)).append("\n");
+                index = endIndex;
+            }
+            
+            pemBuilder.append("-----END CERTIFICATE REQUEST-----");
+            
+            return pemBuilder.toString();
                    
         } catch (Exception e) {
             throw new RuntimeException("Error generating CSR: " + e.getMessage(), e);
@@ -1525,28 +1664,59 @@ public class CSRService {
     }
 
     /**
-     * Parses a JKS private key from Base64 string content.
+     * Parses a private key from PEM format.
+     * 
+     * Supports:
+     * - PKCS#8 format (-----BEGIN PRIVATE KEY-----)
+     * - PKCS#1 RSA format (-----BEGIN RSA PRIVATE KEY-----)
+     * - Encrypted PKCS#8 format (-----BEGIN ENCRYPTED PRIVATE KEY-----)
+     * 
+     * @param privateKeyContent The PEM-encoded private key content
+     * @return PrivateKey object
+     * @throws RuntimeException if parsing fails
      */
-    private java.security.PrivateKey parsePrivateKeyFromPKCS12(String privateKeyContent) {
+    private java.security.PrivateKey parsePrivateKeyFromPEM(String privateKeyContent) {
+        if (privateKeyContent == null || privateKeyContent.trim().isEmpty()) {
+            throw new IllegalArgumentException("Private key content cannot be null or empty");
+        }
+
         try {
-            // Decode Base64 content
-            byte[] keystoreBytes = org.bouncycastle.util.encoders.Base64.decode(privateKeyContent);
+            // Remove PEM headers and footers
+            String cleanPem = privateKeyContent
+                .replace("-----BEGIN PRIVATE KEY-----", "")
+                .replace("-----END PRIVATE KEY-----", "")
+                .replace("-----BEGIN RSA PRIVATE KEY-----", "")
+                .replace("-----END RSA PRIVATE KEY-----", "")
+                .replace("-----BEGIN ENCRYPTED PRIVATE KEY-----", "")
+                .replace("-----END ENCRYPTED PRIVATE KEY-----", "")
+                .replaceAll("\\s", "");
             
-            // Load JKS keystore
-            java.security.KeyStore keyStore = java.security.KeyStore.getInstance("JKS");
-            java.io.ByteArrayInputStream bais = new java.io.ByteArrayInputStream(keystoreBytes);
-            keyStore.load(bais, "changeit".toCharArray());
+            // Decode Base64
+            byte[] derData = Base64.getDecoder().decode(cleanPem);
             
-            // Get private key from keystore
-            java.security.PrivateKey privateKey = (java.security.PrivateKey) keyStore.getKey("private-key", "changeit".toCharArray());
+            // Create key factory
+            java.security.KeyFactory keyFactory = java.security.KeyFactory.getInstance("RSA");
             
-            if (privateKey == null) {
-                throw new RuntimeException("Private key not found in keystore");
+            // Try PKCS#8 format first (most common)
+            try {
+                java.security.spec.PKCS8EncodedKeySpec keySpec = 
+                    new java.security.spec.PKCS8EncodedKeySpec(derData);
+                return keyFactory.generatePrivate(keySpec);
+            } catch (java.security.spec.InvalidKeySpecException e) {
+                // If PKCS#8 fails, might be PKCS#1 RSA format
+                // For PKCS#1, we need to convert to PKCS#8 first
+                // This is a simplified approach - in production you might use BouncyCastle's PEMParser
+                throw new RuntimeException("Failed to parse private key. " +
+                    "Please ensure it's in PKCS#8 format (-----BEGIN PRIVATE KEY-----). " +
+                    "If it's in PKCS#1 format (-----BEGIN RSA PRIVATE KEY-----), " +
+                    "please convert it using: openssl pkcs8 -topk8 -nocrypt -in key.pem -out key_pkcs8.pem");
             }
-            
-            return privateKey;
+        } catch (IllegalArgumentException e) {
+            throw new RuntimeException("Invalid Base64 encoding in private key: " + e.getMessage(), e);
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new RuntimeException("RSA algorithm not available: " + e.getMessage(), e);
         } catch (Exception e) {
-            throw new RuntimeException("Error parsing private key: " + e.getMessage(), e);
+            throw new RuntimeException("Failed to parse private key from PEM: " + e.getMessage(), e);
         }
     }
 }

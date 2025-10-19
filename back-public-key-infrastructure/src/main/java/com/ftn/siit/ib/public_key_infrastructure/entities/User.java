@@ -81,7 +81,7 @@ public class User {
     }
 
     // Many-to-many relationship with certificates
-    @ManyToMany(fetch = FetchType.LAZY)
+    @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(
         name = "user_certificates",
         joinColumns = @JoinColumn(name = "user_id"),

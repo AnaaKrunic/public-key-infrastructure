@@ -1,7 +1,10 @@
 package com.ftn.siit.ib.public_key_infrastructure.controllers;
 
 import com.ftn.siit.ib.public_key_infrastructure.dtos.*;
+import com.ftn.siit.ib.public_key_infrastructure.repositories.UserRepository;
 import com.ftn.siit.ib.public_key_infrastructure.services.CSRService;
+import com.ftn.siit.ib.public_key_infrastructure.entities.User;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -18,9 +21,11 @@ import java.time.LocalDateTime;
 public class CSRController {
 
     private final CSRService csrService;
+    private final UserRepository userRepository;
 
-    public CSRController(CSRService csrService) {
+    public CSRController(CSRService csrService, UserRepository userRepository) {
         this.csrService = csrService;
+        this.userRepository = userRepository;
     }
 
     /**
@@ -152,11 +157,11 @@ public class CSRController {
 
     /**
      * Helper method to get current user ID from authentication context.
-     * This is a placeholder implementation - in a real system, you'd look up the user by email.
      */
     private Long getCurrentUserId(Authentication authentication) {
-        // This is a placeholder - in a real implementation, you'd look up the user by email
-        // and return their actual ID
-        return 1L;
+        String email = authentication.getName();
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        return user.getId();
     }
 }
