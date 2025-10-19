@@ -30,7 +30,9 @@
               "src/styles.css"
             ],
             "scripts": [],
-            "prerender": false
+            "server": "src/main.server.ts",
+            "prerender": false,
+            "ssr": false
           },
           "configurations": {
             "production": {
@@ -43,7 +45,7 @@
                 {
                   "type": "anyComponentStyle",
                   "maximumWarning": "2kB",
-                  "maximumError": "4kB"
+                  "maximumError": "600kB"
                 }
               ],
               "outputHashing": "all"

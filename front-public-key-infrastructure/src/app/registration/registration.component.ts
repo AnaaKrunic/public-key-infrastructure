@@ -2,7 +2,8 @@ import { Component, Inject, PLATFORM_ID } from '@angular/core';
 import { CommonModule, isPlatformBrowser } from '@angular/common';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
-import { AuthService, UserRegistrationDTO } from '../services/auth.service';
+import { AuthService } from '../services/auth/auth.service';
+import { UserRegistrationDTO } from '../models/UserRegistrationDTO';
 import { PasswordBreachService, PasswordBreachResponse } from '../services/password-breach.service';
 
 @Component({

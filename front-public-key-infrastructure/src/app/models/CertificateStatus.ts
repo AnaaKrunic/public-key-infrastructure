@@ -1,0 +1,10 @@
+export enum CertificateStatus {
+  ACTIVE = 'ACTIVE',
+  DORMANT = 'DORMANT',
+  EXPIRED = 'EXPIRED',
+  REVOKED = 'REVOKED',
+  INVALID = 'INVALID',
+  CIRCULAR = 'CIRCULAR',
+  PROHIBITED = 'PROHIBITED'
+}
+

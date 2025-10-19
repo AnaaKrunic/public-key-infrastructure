@@ -2,7 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
-import { AuthService } from '../services/auth.service';
+import { AuthService } from '../services/auth/auth.service';
 import { MfaService } from '../services/mfa.service';
 
 @Component({
@@ -31,16 +31,16 @@ export class DashboardComponent implements OnInit {
 
   ngOnInit() {
     // Check if user is logged in
-    const accessToken = this.authService.getAccessToken();
+    const accessToken = this.authService.accessToken;
     if (!accessToken) {
       this.router.navigate(['/login']);
       return;
     }
 
     // Get user email from JWT token
-    this.userEmail = this.authService.getUserEmail();
+    this.userEmail = this.authService.userEmail || 'Unknown';
     
-    if (!this.userEmail) {
+    if (!this.userEmail || this.userEmail === 'Unknown') {
       console.error('Could not extract email from JWT token');
       this.userEmail = 'Unknown';
       return;

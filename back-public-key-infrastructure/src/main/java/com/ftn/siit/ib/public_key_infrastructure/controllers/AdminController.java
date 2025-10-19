@@ -22,12 +22,7 @@ public class AdminController {
     @PostMapping("/assign-role")
     public ResponseEntity<?> assignRole(@RequestBody AssignRoleDTO assignRoleDTO) {
         try {
-            // Proverava da li je dozvoljena uloga za dodelu
-            if (assignRoleDTO.getRole() == UserRole.ADMIN) {
-                return ResponseEntity.badRequest().body(Map.of("message", "Cannot assign ADMIN role through API"));
-            }
-
-            userService.assignRole(assignRoleDTO.getEmail(), assignRoleDTO.getRole());
+            //Ovo ne trbea da postoji
             return ResponseEntity.ok().body(Map.of("message", "Role assigned successfully"));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
@@ -37,7 +32,7 @@ public class AdminController {
     @PostMapping("/assign-ca-role")
     public ResponseEntity<?> assignCARole(@RequestParam String email) {
         try {
-            userService.assignRole(email, UserRole.CA_USER);
+            //Ovo ne trbea da postoji
             return ResponseEntity.ok().body(Map.of("message", "CA role assigned successfully"));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));

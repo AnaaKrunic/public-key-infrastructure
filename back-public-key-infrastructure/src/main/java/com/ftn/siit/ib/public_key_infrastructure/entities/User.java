@@ -1,11 +1,18 @@
 package com.ftn.siit.ib.public_key_infrastructure.entities;
 
 import jakarta.persistence.*;
-
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import lombok.AllArgsConstructor;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "users")
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
 public class User {
 
     @Id
@@ -24,15 +31,19 @@ public class User {
     @Column(nullable = false)
     private String lastName;
 
-    @ManyToOne
-    @JoinColumn(name = "organization_id")
-    private Organization organization;
-
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private UserRole role = UserRole.USER;
+    private Role role = Role.EE_USER;  // Default role
+
+    @Column(length = 255)
+    private String organization;
+
+    @Column(nullable = false)
 
     private boolean enabled = false;
+
+    @Column(nullable = false)
+    private boolean emailConfirmed = false;
 
     @Column(unique = true)
     private String activationToken;
@@ -40,16 +51,18 @@ public class User {
     private LocalDateTime tokenExpiration;
 
     private String mfaSecret;
+
+    @Column(nullable = false)
     private boolean mfaEnabled = false;
     
-    private String refreshToken;
     private LocalDateTime refreshTokenExpiration;
 
-    public User() {
-    }
+    @Column(length = 512)
+    private String refreshToken;
 
-    public User(Long id, String email, String passwordHash, String firstName, String lastName, Organization organization,
-                UserRole role, boolean enabled, String activationToken, LocalDateTime tokenExpiration, String mfaSecret, boolean mfaEnabled,
+    private LocalDateTime refreshTokenExpiresAt;
+    public User(Long id, String email, String passwordHash, String firstName, String lastName, String organization,
+                Role role, boolean enabled, String activationToken, LocalDateTime tokenExpiration, String mfaSecret, boolean mfaEnabled,
                 String refreshToken, LocalDateTime refreshTokenExpiration) {
         this.id = id;
         this.email = email;
@@ -67,115 +80,13 @@ public class User {
         this.refreshTokenExpiration = refreshTokenExpiration;
     }
 
-    public Long getId() {
-        return id;
-    }
+    // Many-to-many relationship with certificates
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+        name = "user_certificates",
+        joinColumns = @JoinColumn(name = "user_id"),
+        inverseJoinColumns = @JoinColumn(name = "certificate_id")
+    )
+    private List<Certificate> myCertificates = new ArrayList<>();
 
-    public void setId(Long id) {
-        this.id = id;
-    }
-
-    public String getEmail() {
-        return email;
-    }
-
-    public void setEmail(String email) {
-        this.email = email;
-    }
-
-    public String getPasswordHash() {
-        return passwordHash;
-    }
-
-    public void setPasswordHash(String passwordHash) {
-        this.passwordHash = passwordHash;
-    }
-
-    public String getFirstName() {
-        return firstName;
-    }
-
-    public void setFirstName(String firstName) {
-        this.firstName = firstName;
-    }
-
-    public String getLastName() {
-        return lastName;
-    }
-
-    public void setLastName(String lastName) {
-        this.lastName = lastName;
-    }
-
-    public Organization getOrganization() {
-        return organization;
-    }
-
-    public void setOrganization(Organization organization) {
-        this.organization = organization;
-    }
-
-    public boolean isEnabled() {
-        return enabled;
-    }
-
-    public void setEnabled(boolean enabled) {
-        this.enabled = enabled;
-    }
-
-    public String getActivationToken() {
-        return activationToken;
-    }
-
-    public void setActivationToken(String activationToken) {
-        this.activationToken = activationToken;
-    }
-
-    public LocalDateTime getTokenExpiration() {
-        return tokenExpiration;
-    }
-
-    public void setTokenExpiration(LocalDateTime tokenExpiration) {
-        this.tokenExpiration = tokenExpiration;
-    }
-
-    public String getMfaSecret() {
-        return mfaSecret;
-    }
-
-    public void setMfaSecret(String mfaSecret) {
-        this.mfaSecret = mfaSecret;
-    }
-
-    public boolean isMfaEnabled() {
-        return mfaEnabled;
-    }
-
-    public void setMfaEnabled(boolean mfaEnabled) {
-        this.mfaEnabled = mfaEnabled;
-    }
-
-    public String getRefreshToken() {
-        return refreshToken;
-    }
-
-    public void setRefreshToken(String refreshToken) {
-        this.refreshToken = refreshToken;
-    }
-
-    public LocalDateTime getRefreshTokenExpiration() {
-        return refreshTokenExpiration;
-    }
-
-    public void setRefreshTokenExpiration(LocalDateTime refreshTokenExpiration) {
-        this.refreshTokenExpiration = refreshTokenExpiration;
-    }
-
-    public UserRole getRole() {
-        return role;
-    }
-
-    public void setRole(UserRole role) {
-        this.role = role;
-    }
 }

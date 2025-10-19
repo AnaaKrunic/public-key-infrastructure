@@ -2,7 +2,7 @@ import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
-import { AuthService, LoginDTO } from '../services/auth.service';
+import { AuthService, LoginDTO } from '../services/auth/auth.service';
 import { MfaService } from '../services/mfa.service';
 
 @Component({
@@ -33,18 +33,27 @@ export class LoginComponent {
   }
 
   onSubmit() {
+    console.log('LoginComponent.onSubmit: Form submitted');
+    console.log('LoginComponent.onSubmit: Form valid:', this.loginForm.valid);
+    console.log('LoginComponent.onSubmit: Form value:', this.loginForm.value);
+    
     if (this.loginForm.valid) {
       this.isLoading = true;
       this.errorMessage = '';
 
       const credentials: LoginDTO = this.loginForm.value;
+      console.log('LoginComponent.onSubmit: Calling authService.login with:', credentials);
+      console.log('LoginComponent.onSubmit: AuthService instance:', this.authService);
+      console.log('LoginComponent.onSubmit: AuthService login method:', this.authService.login);
 
       this.authService.login(credentials).subscribe({
         next: (response: any) => {
+          console.log('LoginComponent.onSubmit: Login successful, response:', response);
           this.isLoading = false;
-          // Store tokens are handled in the service
-          // Redirect to dashboard or main page
-          this.router.navigate(['/dashboard']); // You might want to create a dashboard component
+          // Store tokens and user data are handled in the service
+          // Now we can safely navigate as user data is loaded
+          console.log('LoginComponent.onSubmit: Navigating to /dashboard');
+          this.router.navigate(['/dashboard']);
         },
         error: (error: any) => {
           console.log('Login error:', error);
@@ -76,6 +85,7 @@ export class LoginComponent {
         }
       });
     } else {
+      console.log('LoginComponent.onSubmit: Form is invalid, marking fields as touched');
       this.markFormGroupTouched();
     }
   }
