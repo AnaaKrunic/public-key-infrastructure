@@ -3,6 +3,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { Certificate } from '../../models/Certificate';
+import { BasicCACertificate } from '../../models/BasicCACertificate';
 import { IssueCertificateRequest } from '../../models/IssueCertificateRequest';
 import { DownloadCertificateRequest } from '../../models/DownloadCertificateRequest';
 import { RevokeCertificateRequest } from '../../models/RevokeCertificateRequest';
@@ -38,6 +39,17 @@ export class CertificatesService {
   // Get all valid signing certificates
   getAllValidSigningCertificates(): Observable<Certificate[]> {
     return this.http.get<Certificate[]>(`${this.API_BASE_URL}/certificates/get-all-valid-signing`);
+  }
+
+  // Get all valid CA certificates (excluding root) with basic info only
+  // Used by EE users to select a CA when requesting certificates
+  getAllCACertificates(): Observable<BasicCACertificate[]> {
+    return this.http.get<BasicCACertificate[]>(`${this.API_BASE_URL}/certificates/get-all-ca-certificates`);
+  }
+
+  // Get CA certificates from a specific CA user's chain (Admin only)
+  getCACertificatesFromUserChain(caUserId: string): Observable<Certificate[]> {
+    return this.http.get<Certificate[]>(`${this.API_BASE_URL}/certificates/get-ca-certificates-from-user-chain/${caUserId}`);
   }
 
   // Get valid signing certificates for current CA user (organization-specific)

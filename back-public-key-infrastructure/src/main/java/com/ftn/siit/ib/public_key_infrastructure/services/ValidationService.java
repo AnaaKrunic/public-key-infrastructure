@@ -15,6 +15,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Pattern;
+import java.security.cert.X509Certificate;
 
 /**
  * ValidationService provides comprehensive validation for certificates, certificate chains,
@@ -40,6 +41,7 @@ public class ValidationService {
      * - Certificate status must be VALID (not REVOKED)
      * - Certificate must be within its validity period (notBefore <= now <= notAfter)
      * - Certificate must have keyCertSign key usage
+     * - Digital signature must be valid (self-signed for ROOT, signed by issuer for INTERMEDIATE)
      * 
      * @param issuer The certificate to validate as a CA
      * @throws IllegalArgumentException if issuer is null
@@ -69,6 +71,36 @@ public class ValidationService {
         // Check key usage contains keyCertSign
         if (issuer.getKeyUsage() == null || !issuer.getKeyUsage().contains("keyCertSign")) {
             throw new InvalidCertificateException("Certificate must have keyCertSign key usage to be a valid CA");
+        }
+
+        // Verify digital signature
+        try {
+            X509Certificate x509Cert = parseX509CertificateFromPEM(issuer.getCertificateData());
+            
+            // For root certificates (self-signed), verify against own public key
+            if (issuer.getCertificateType() == CertificateType.ROOT) {
+                if (!certificateSignerService.verifyCertificateSignature(x509Cert, x509Cert.getPublicKey())) {
+                    throw new InvalidCertificateException("Root certificate has invalid self-signature");
+                }
+            } 
+            // For intermediate certificates, verify against issuer's public key
+            else if (issuer.getCertificateType() == CertificateType.INTERMEDIATE) {
+                if (issuer.getIssuerCertificate() == null) {
+                    throw new InvalidCertificateException("Intermediate certificate must have an issuer certificate");
+                }
+                
+                X509Certificate issuerX509Cert = parseX509CertificateFromPEM(
+                    issuer.getIssuerCertificate().getCertificateData()
+                );
+                
+                if (!certificateSignerService.verifyCertificateSignature(x509Cert, issuerX509Cert.getPublicKey())) {
+                    throw new InvalidCertificateException("Certificate signature verification failed");
+                }
+            }
+        } catch (InvalidCertificateException e) {
+            throw e; // Re-throw our custom exceptions
+        } catch (Exception e) {
+            throw new InvalidCertificateException("Failed to verify certificate signature: " + e.getMessage());
         }
     }
 
@@ -380,6 +412,59 @@ public class ValidationService {
     }
 
     /**
+     * Validates that the issuer certificate's validity period covers the new certificate's validity period.
+     * 
+     * The new certificate must:
+     * - Have a validFrom date that is on or after the issuer's validFrom
+     * - Have a validTo date that is on or before the issuer's validTo
+     * 
+     * This ensures the new certificate cannot be valid outside the issuer's validity window.
+     * 
+     * @param issuer The issuer certificate
+     * @param newCertValidFrom The validity start date of the new certificate
+     * @param newCertValidTo The validity end date of the new certificate
+     * @throws IllegalArgumentException if any parameter is null
+     * @throws ValidationException if the validity period is invalid
+     */
+    public void validateCertificateValidityPeriod(Certificate issuer, LocalDateTime newCertValidFrom, LocalDateTime newCertValidTo) {
+        if (issuer == null) {
+            throw new IllegalArgumentException("Issuer certificate cannot be null");
+        }
+        if (newCertValidFrom == null) {
+            throw new IllegalArgumentException("New certificate validFrom cannot be null");
+        }
+        if (newCertValidTo == null) {
+            throw new IllegalArgumentException("New certificate validTo cannot be null");
+        }
+
+        // Check if new certificate's validFrom is before issuer's validFrom
+        if (newCertValidFrom.isBefore(issuer.getValidFrom())) {
+            throw new ValidationException(
+                "Certificate cannot be valid before its issuer. " +
+                "Certificate validFrom: " + newCertValidFrom + ", " +
+                "Issuer validFrom: " + issuer.getValidFrom()
+            );
+        }
+
+        // Check if new certificate's validTo is after issuer's validTo
+        if (newCertValidTo.isAfter(issuer.getValidTo())) {
+            throw new ValidationException(
+                "Certificate cannot be valid after its issuer. " +
+                "Certificate validTo: " + newCertValidTo + ", " +
+                "Issuer validTo: " + issuer.getValidTo()
+            );
+        }
+
+        // Verify the validity period is positive
+        if (newCertValidFrom.isAfter(newCertValidTo) || newCertValidFrom.isEqual(newCertValidTo)) {
+            throw new ValidationException(
+                "Certificate validFrom must be before validTo. " +
+                "ValidFrom: " + newCertValidFrom + ", ValidTo: " + newCertValidTo
+            );
+        }
+    }
+
+    /**
      * Validates that a regex pattern is valid and can be compiled.
      * 
      * @param pattern The regex pattern to validate
@@ -398,6 +483,36 @@ public class ValidationService {
             Pattern.compile(pattern);
         } catch (java.util.regex.PatternSyntaxException e) {
             throw new ValidationException("Invalid regex pattern for field '" + fieldName + "': " + e.getMessage());
+        }
+    }
+
+    /**
+     * Parses an X.509 certificate from PEM format.
+     * 
+     * @param pemData The PEM-encoded certificate data
+     * @return X509Certificate object
+     * @throws RuntimeException if parsing fails
+     */
+    private X509Certificate parseX509CertificateFromPEM(String pemData) {
+        if (pemData == null || pemData.trim().isEmpty()) {
+            throw new IllegalArgumentException("PEM data cannot be null or empty");
+        }
+
+        try {
+            String cleanPem = pemData
+                .replace("-----BEGIN CERTIFICATE-----", "")
+                .replace("-----END CERTIFICATE-----", "")
+                .replaceAll("\\s", "");
+            
+            byte[] derData = java.util.Base64.getDecoder().decode(cleanPem);
+            java.security.cert.CertificateFactory certFactory = 
+                java.security.cert.CertificateFactory.getInstance("X.509");
+            
+            return (X509Certificate) certFactory.generateCertificate(
+                new java.io.ByteArrayInputStream(derData)
+            );
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to parse X.509 certificate from PEM: " + e.getMessage(), e);
         }
     }
 }

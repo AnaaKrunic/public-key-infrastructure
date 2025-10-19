@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { MatDialog } from '@angular/material/dialog';
 import { CertificatesService } from '../../../services/certificates/certificates.service';
 import { Certificate } from '../../../models/Certificate';
 import { RevokeCertificateRequest } from '../../../models/RevokeCertificateRequest';
@@ -87,9 +88,7 @@ import { RevocationReason } from '../../../models/RevocationReason';
                   <button (click)="downloadCertificate(cert, 'PEM')" class="btn btn-sm btn-info" title="Download PEM">
                     PEM
                   </button>
-                  <button (click)="downloadCertificate(cert, 'PKCS12')" class="btn btn-sm btn-info" title="Download PKCS12">
-                    PKCS12
-                  </button>
+                  <!-- PKCS12 download removed: Admins cannot download private keys -->
                   <button (click)="viewDetails(cert)" class="btn btn-sm btn-secondary" title="View Details">
                     Details
                   </button>
@@ -531,7 +530,10 @@ export class AllCertificatesComponent implements OnInit {
   };
   revocationReasons = Object.values(RevocationReason);
 
-  constructor(private certificatesService: CertificatesService) {}
+  constructor(
+    private certificatesService: CertificatesService,
+    private dialog: MatDialog
+  ) {}
 
   ngOnInit(): void {
     this.loadCertificates();
@@ -573,15 +575,8 @@ export class AllCertificatesComponent implements OnInit {
     });
   }
 
-  downloadCertificate(certificate: Certificate, format: 'PEM' | 'PKCS12'): void {
-    if (format === 'PEM') {
-      this.downloadPEMCertificate(certificate);
-    } else if (format === 'PKCS12') {
-      this.downloadPKCS12Certificate(certificate);
-    }
-  }
-
-  private downloadPEMCertificate(certificate: Certificate): void {
+  downloadCertificate(certificate: Certificate, format: 'PEM'): void {
+    // Admins can only download PEM format (no private keys)
     const blob = new Blob([certificate.certificateData || ''], { type: 'application/x-pem-file' });
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -589,29 +584,6 @@ export class AllCertificatesComponent implements OnInit {
     link.download = `certificate_${certificate.serialNumber}.pem`;
     link.click();
     window.URL.revokeObjectURL(url);
-  }
-
-  private downloadPKCS12Certificate(certificate: Certificate): void {
-    const request = {
-      certificateSerialNumber: certificate.serialNumber,
-      password: 'changeit' // Default password, in production this should be user-provided
-    };
-
-    this.certificatesService.generatePKCS12File(request).subscribe({
-      next: (blob) => {
-        // Create download link directly from blob
-        const url = window.URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `certificate_${certificate.serialNumber}.p12`;
-        link.click();
-        window.URL.revokeObjectURL(url);
-      },
-      error: (err) => {
-        console.error('Error downloading PKCS12:', err);
-        alert('Failed to download PKCS12 file');
-      }
-    });
   }
 
   viewDetails(certificate: Certificate): void {

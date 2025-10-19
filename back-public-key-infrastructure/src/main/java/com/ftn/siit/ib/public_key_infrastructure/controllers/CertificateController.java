@@ -14,6 +14,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.parameters.P;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Optional;
@@ -104,6 +105,40 @@ public class CertificateController {
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body("Error retrieving signing certificates: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Gets all valid CA certificates (excluding root certificates) with basic information only.
+     * Used by EE users to select a CA when requesting certificates.
+     * Returns only: serial number, common name, organization, organizational unit.
+     */
+    @PreAuthorize("hasRole('EE_USER')")
+    @GetMapping("/get-all-ca-certificates")
+    public ResponseEntity<?> getAllCACertificates() {
+        try {
+            var certificates = certificateService.getAllValidCACertificates();
+            return ResponseEntity.ok(certificates);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body("Error retrieving CA certificates: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Gets all CA certificates from a specific CA user's chain.
+     * Used by admins when managing CA user certificate assignments.
+     * Requires Admin role.
+     */
+    @GetMapping("/get-ca-certificates-from-user-chain/{caUserId}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<?> getCACertificatesFromUserChain(@PathVariable String caUserId) {
+        try {
+            var certificates = certificateService.getCACertificatesFromUserChain(caUserId);
+            return ResponseEntity.ok(certificates);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body("Error retrieving CA certificates from user chain: " + e.getMessage());
         }
     }
 
@@ -455,7 +490,7 @@ public class CertificateController {
             User user = certificateService.getUserRepository().findById(Long.parseLong(userId))
                     .orElseThrow(() -> new RuntimeException("User not found"));
             
-            var certificate = certificateService.createEndEntityCertificate(dto, user);
+            var certificate = certificateService.createEndEntityCertificate(dto, user, false);
             return ResponseEntity.ok(certificate);
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)

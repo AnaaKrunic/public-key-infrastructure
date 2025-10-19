@@ -107,6 +107,88 @@ import { CertificateRequestsService } from '../../../../services/certificates/ce
                 <mat-option value="OCSP_SIGNING">OCSP Signing</mat-option>
               </mat-select>
             </mat-form-field>
+            
+            <!-- Subject Alternative Names -->
+            <div class="extension-group">
+              <label class="extension-label">Subject Alternative Names</label>
+              <div class="chip-container">
+                <span class="chip" *ngFor="let san of subjectAlternativeNames">
+                  {{ san }}
+                  <button type="button" class="chip-remove" (click)="removeSan(san)">×</button>
+                </span>
+              </div>
+              <div class="input-with-button">
+                <mat-form-field appearance="outline" class="flex-field">
+                  <mat-label>Add SAN</mat-label>
+                  <input matInput [(ngModel)]="newSan" placeholder="e.g., example.com" (keyup.enter)="addSan()">
+                </mat-form-field>
+                <button mat-icon-button color="primary" (click)="addSan()" type="button">
+                  <mat-icon>add</mat-icon>
+                </button>
+              </div>
+            </div>
+            
+            <!-- Issuer Alternative Names -->
+            <div class="extension-group">
+              <label class="extension-label">Issuer Alternative Names</label>
+              <div class="chip-container">
+                <span class="chip" *ngFor="let ian of issuerAlternativeNames">
+                  {{ ian }}
+                  <button type="button" class="chip-remove" (click)="removeIan(ian)">×</button>
+                </span>
+              </div>
+              <div class="input-with-button">
+                <mat-form-field appearance="outline" class="flex-field">
+                  <mat-label>Add IAN</mat-label>
+                  <input matInput [(ngModel)]="newIan" placeholder="e.g., issuer.example.com" (keyup.enter)="addIan()">
+                </mat-form-field>
+                <button mat-icon-button color="primary" (click)="addIan()" type="button">
+                  <mat-icon>add</mat-icon>
+                </button>
+              </div>
+            </div>
+            
+            <!-- Name Constraints -->
+            <mat-form-field appearance="outline" class="full-width">
+              <mat-label>Name Constraints</mat-label>
+              <input matInput [(ngModel)]="nameConstraints" placeholder="e.g., .example.com">
+              <mat-hint>Specify permitted/excluded subtrees</mat-hint>
+            </mat-form-field>
+            
+            <!-- Basic Constraints -->
+            <div class="extension-group">
+              <label class="extension-label">Basic Constraints</label>
+              <div class="constraint-row">
+                <mat-form-field appearance="outline" class="half-width">
+                  <mat-label>Is CA</mat-label>
+                  <mat-select [(ngModel)]="basicConstraints.isCa">
+                    <mat-option [value]="true">Yes</mat-option>
+                    <mat-option [value]="false">No</mat-option>
+                  </mat-select>
+                </mat-form-field>
+                <mat-form-field appearance="outline" class="half-width">
+                  <mat-label>Path Length</mat-label>
+                  <input matInput type="number" [(ngModel)]="basicConstraints.pathLen" placeholder="Path length constraint" min="0">
+                </mat-form-field>
+              </div>
+            </div>
+            
+            <!-- Certificate Policy -->
+            <div class="extension-group">
+              <label class="extension-label">Certificate Policy</label>
+              <mat-form-field appearance="outline" class="full-width">
+                <mat-label>Policy Identifier (OID)</mat-label>
+                <input matInput [(ngModel)]="certificatePolicy.policyIdentifier" placeholder="e.g., 2.5.29.32.0">
+              </mat-form-field>
+              <mat-form-field appearance="outline" class="full-width">
+                <mat-label>CPS URI (Optional)</mat-label>
+                <input matInput [(ngModel)]="certificatePolicy.cpsUri" placeholder="https://example.com/cps">
+              </mat-form-field>
+              <mat-form-field appearance="outline" class="full-width">
+                <mat-label>User Notice (Optional)</mat-label>
+                <input matInput [(ngModel)]="certificatePolicy.userNotice" placeholder="User notice text">
+              </mat-form-field>
+            </div>
           </div>
         </div>
       </div>
@@ -381,6 +463,86 @@ import { CertificateRequestsService } from '../../../../services/certificates/ce
       color: #17a2b8;
     }
     
+    /* Extension groups */
+    .extension-group {
+      margin-bottom: 24px;
+      padding: 16px;
+      background: #f8f9fa;
+      border-radius: 8px;
+      border: 1px solid #e9ecef;
+    }
+    
+    .extension-label {
+      display: block;
+      font-weight: 700;
+      color: #495057;
+      font-size: 14px;
+      margin-bottom: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    
+    .chip-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 12px;
+      min-height: 40px;
+      padding: 8px;
+      background: white;
+      border-radius: 6px;
+      border: 1px solid #dee2e6;
+    }
+    
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      background: #e9ecef;
+      border-radius: 16px;
+      font-size: 13px;
+      color: #495057;
+      font-weight: 500;
+      border: 1px solid #ced4da;
+    }
+    
+    .chip-remove {
+      background: none;
+      border: none;
+      color: #dc3545;
+      cursor: pointer;
+      font-size: 18px;
+      font-weight: bold;
+      padding: 0;
+      line-height: 1;
+      margin-left: 4px;
+    }
+    
+    .chip-remove:hover {
+      color: #c82333;
+      transform: scale(1.2);
+    }
+    
+    .input-with-button {
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+    }
+    
+    .flex-field {
+      flex: 1;
+    }
+    
+    .constraint-row {
+      display: flex;
+      gap: 16px;
+    }
+    
+    .half-width {
+      flex: 1;
+    }
+    
     /* Responsive design */
     @media (max-width: 768px) {
       .dialog-container {
@@ -406,6 +568,15 @@ import { CertificateRequestsService } from '../../../../services/certificates/ce
         width: 100%;
         min-width: auto;
       }
+      
+      .constraint-row {
+        flex-direction: column;
+        gap: 0;
+      }
+      
+      .input-with-button {
+        flex-direction: column;
+      }
     }
   `]
 })
@@ -417,6 +588,17 @@ export class EditCertificateRequestDialogComponent {
   validityDays: number = 30;
   keyUsage: string[] = ['DIGITAL_SIGNATURE', 'KEY_ENCIPHERMENT'];
   extendedKeyUsage: string[] = ['SERVER_AUTH'];
+  
+  // Additional extension fields
+  subjectAlternativeNames: string[] = [];
+  issuerAlternativeNames: string[] = [];
+  nameConstraints: string = '';
+  basicConstraints = { isCa: false, pathLen: null as number | null };
+  certificatePolicy = { policyIdentifier: '', cpsUri: '', userNotice: '' };
+  
+  // For adding SANs/IANs
+  newSan: string = '';
+  newIan: string = '';
 
   constructor(@Inject(MAT_DIALOG_DATA) public data: CertificateRequest) {
     this.request = data;
@@ -428,9 +610,21 @@ export class EditCertificateRequestDialogComponent {
 
   onApprove(): void {
     if (this.isFormValid()) {
+      // Prepare extension data (requestId and validityDays are passed as separate params)
+      const extensionData = {
+        keyUsage: this.keyUsage,
+        extendedKeyUsage: this.extendedKeyUsage,
+        subjectAlternativeNames: this.subjectAlternativeNames,
+        issuerAlternativeNames: this.issuerAlternativeNames,
+        nameConstraints: this.nameConstraints,
+        basicConstraints: JSON.stringify(this.basicConstraints),
+        certificatePolicy: JSON.stringify(this.certificatePolicy)
+      };
+      
       this.certificateRequestsService.approveCertificateRequest(
         this.request.id,
-        this.validityDays
+        this.validityDays,
+        extensionData
       ).subscribe({
         next: () => {
           this.dialogRef.close('reload');
@@ -459,5 +653,34 @@ export class EditCertificateRequestDialogComponent {
 
   isFormValid(): boolean {
     return this.validityDays > 0 && this.validityDays <= 365;
+  }
+  
+  // Extension management methods
+  addSan(): void {
+    if (this.newSan && !this.subjectAlternativeNames.includes(this.newSan.trim())) {
+      this.subjectAlternativeNames.push(this.newSan.trim());
+      this.newSan = '';
+    }
+  }
+  
+  removeSan(san: string): void {
+    const index = this.subjectAlternativeNames.indexOf(san);
+    if (index > -1) {
+      this.subjectAlternativeNames.splice(index, 1);
+    }
+  }
+  
+  addIan(): void {
+    if (this.newIan && !this.issuerAlternativeNames.includes(this.newIan.trim())) {
+      this.issuerAlternativeNames.push(this.newIan.trim());
+      this.newIan = '';
+    }
+  }
+  
+  removeIan(ian: string): void {
+    const index = this.issuerAlternativeNames.indexOf(ian);
+    if (index > -1) {
+      this.issuerAlternativeNames.splice(index, 1);
+    }
   }
 }
