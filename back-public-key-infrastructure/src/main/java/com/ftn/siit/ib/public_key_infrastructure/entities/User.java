@@ -39,6 +39,7 @@ public class User {
     private String organization;
 
     @Column(nullable = false)
+
     private boolean enabled = false;
 
     @Column(nullable = false)
@@ -53,11 +54,31 @@ public class User {
 
     @Column(nullable = false)
     private boolean mfaEnabled = false;
+    
+    private LocalDateTime refreshTokenExpiration;
 
     @Column(length = 512)
     private String refreshToken;
 
     private LocalDateTime refreshTokenExpiresAt;
+    public User(Long id, String email, String passwordHash, String firstName, String lastName, String organization,
+                Role role, boolean enabled, String activationToken, LocalDateTime tokenExpiration, String mfaSecret, boolean mfaEnabled,
+                String refreshToken, LocalDateTime refreshTokenExpiration) {
+        this.id = id;
+        this.email = email;
+        this.passwordHash = passwordHash;
+        this.firstName = firstName;
+        this.lastName = lastName;
+        this.organization = organization;
+        this.role = role;
+        this.enabled = enabled;
+        this.activationToken = activationToken;
+        this.tokenExpiration = tokenExpiration;
+        this.mfaSecret = mfaSecret;
+        this.mfaEnabled = mfaEnabled;
+        this.refreshToken = refreshToken;
+        this.refreshTokenExpiration = refreshTokenExpiration;
+    }
 
     // Many-to-many relationship with certificates
     @ManyToMany(fetch = FetchType.LAZY)

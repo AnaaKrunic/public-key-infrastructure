@@ -73,6 +73,24 @@
             </li>
           </ul>
         </div>
+
+        <!-- Breach Status Indicator -->
+        <div class="breach-status" *ngIf="breachStatus.message">
+          <div class="breach-indicator" 
+               [class.checking]="breachStatus.isChecking"
+               [class.safe]="!breachStatus.isChecking && breachStatus.isSafe"
+               [class.unsafe]="!breachStatus.isChecking && !breachStatus.isSafe">
+            <span class="breach-icon">
+              <span *ngIf="breachStatus.isChecking">⏳</span>
+              <span *ngIf="!breachStatus.isChecking && breachStatus.isSafe">✅</span>
+              <span *ngIf="!breachStatus.isChecking && !breachStatus.isSafe">⚠️</span>
+            </span>
+            <span class="breach-message">{{ breachStatus.message }}</span>
+            <span class="breach-count" *ngIf="!breachStatus.isSafe && breachStatus.breachCount > 0">
+              (Pronađena {{ breachStatus.breachCount }} puta u bazama)
+            </span>
+          </div>
+        </div>
       </div>
 
       <!-- Confirm Password Field -->

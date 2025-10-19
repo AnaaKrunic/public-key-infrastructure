@@ -28,10 +28,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
 
         String header = request.getHeader("Authorization");
-        final String jwt;
-        final String username;
 
-        // ✅ SKIP za auth endpointove
         if (request.getServletPath().contains("/api/auth")) {
             chain.doFilter(request, response);
             return;

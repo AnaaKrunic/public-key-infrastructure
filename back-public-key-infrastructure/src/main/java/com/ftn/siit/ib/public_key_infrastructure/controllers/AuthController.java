@@ -37,8 +37,49 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody LoginDTO loginDTO) {
         try {
-            String token = userService.login(loginDTO);
-            return ResponseEntity.ok().body(Map.of("accessToken", token));
+            TokenResponseDTO tokenResponse = userService.login(loginDTO);
+            return ResponseEntity.ok().body(tokenResponse);
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/refresh")
+    public ResponseEntity<?> refreshToken(@RequestBody RefreshTokenDTO refreshTokenDTO) {
+        try {
+            TokenResponseDTO tokenResponse = userService.refreshToken(refreshTokenDTO);
+            return ResponseEntity.ok().body(tokenResponse);
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/logout")
+    public ResponseEntity<?> logout(@RequestParam String email) {
+        try {
+            userService.logout(email);
+            return ResponseEntity.ok().body(Map.of("message", "Logged out successfully"));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/check-password-breach")
+    public ResponseEntity<?> checkPasswordBreach(@RequestBody Map<String, String> request) {
+        try {
+            String password = request.get("password");
+            if (password == null || password.isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of("message", "Password is required"));
+            }
+            
+            boolean isSafe = userService.isPasswordSafe(password);
+            int breachCount = userService.getPasswordBreachCount(password);
+            
+            return ResponseEntity.ok().body(Map.of(
+                "isSafe", isSafe,
+                "breachCount", breachCount,
+                "message", isSafe ? "Password is safe" : "Password has been compromised"
+            ));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         }
