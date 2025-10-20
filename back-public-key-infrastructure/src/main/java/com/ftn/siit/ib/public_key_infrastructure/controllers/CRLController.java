@@ -53,23 +53,14 @@ public class CRLController {
             // Get current user from security context
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
             String userEmail = authentication.getName();
-            
-            // Get user role from authentication
-            Role requesterRole = authentication.getAuthorities().stream()
-                    .map(authority -> {
-                        String authorityName = authority.getAuthority();
-                        if (authorityName.startsWith("ROLE_")) {
-                            authorityName = authorityName.substring(5); // Remove "ROLE_" prefix
-                        }
-                        return Role.valueOf(authorityName);
-                    })
-                    .findFirst()
-                    .orElse(Role.EE_USER);
 
-            // Look up the actual user by email to get their ID
+            // Look up the actual user by email to get their ID and role
             User requester = userRepository.findByEmail(userEmail)
                     .orElseThrow(() -> new RuntimeException("User not found"));
             Long requesterId = requester.getId();
+            Role requesterRole = requester.getRole(); // Use role from database, not authentication
+
+            System.out.println("DEBUG: Revocation requested by user: " + userEmail + " (Role: " + requesterRole + ")");
 
             crlService.revokeCertificate(dto, requesterId, requesterRole);
             

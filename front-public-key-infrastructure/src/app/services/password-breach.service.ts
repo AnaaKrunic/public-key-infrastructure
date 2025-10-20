@@ -12,7 +12,7 @@ export interface PasswordBreachResponse {
   providedIn: 'root'
 })
 export class PasswordBreachService {
-  private readonly API_URL = 'http://localhost:8080/api/auth';
+  private readonly API_URL = 'https://localhost:8443/api/auth';
 
   constructor(private http: HttpClient) {}
 

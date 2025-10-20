@@ -8,7 +8,7 @@ import { CaUser } from '../../models/CaUser';
   providedIn: 'root'
 })
 export class UsersService {
-  private readonly API_BASE_URL = 'http://localhost:8080/api';
+  private readonly API_BASE_URL = 'https://localhost:8443/api';
 
   constructor(private http: HttpClient) {}
 
