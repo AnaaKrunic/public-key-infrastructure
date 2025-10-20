@@ -9,15 +9,12 @@ import com.ftn.siit.ib.public_key_infrastructure.dtos.CreateCAUserDTO;
 import com.ftn.siit.ib.public_key_infrastructure.dtos.ValidCAUserDTO;
 import com.ftn.siit.ib.public_key_infrastructure.entities.User;
 import com.ftn.siit.ib.public_key_infrastructure.entities.Role;
-// import com.ftn.siit.ib.public_key_infrastructure.entities.UserRole; // unused
-// import com.ftn.siit.ib.public_key_infrastructure.repositories.OrganizationRepository; // unused
 import com.ftn.siit.ib.public_key_infrastructure.repositories.UserRepository;
 import com.ftn.siit.ib.public_key_infrastructure.repositories.CertificateRepository;
 import com.ftn.siit.ib.public_key_infrastructure.security.JwtUtil;
 import com.ftn.siit.ib.public_key_infrastructure.services.EmailService;
 import com.ftn.siit.ib.public_key_infrastructure.services.MFAService;
 import com.ftn.siit.ib.public_key_infrastructure.services.PasswordBreachService;
-// import com.ftn.siit.ib.public_key_infrastructure.services.PasswordValidator; // unused duplicate
 import com.ftn.siit.ib.public_key_infrastructure.services.CertificateService;
 import com.ftn.siit.ib.public_key_infrastructure.entities.Certificate;
 import com.ftn.siit.ib.public_key_infrastructure.entities.CertificateStatus;

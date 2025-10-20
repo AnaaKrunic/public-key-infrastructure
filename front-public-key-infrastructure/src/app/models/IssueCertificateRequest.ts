@@ -14,5 +14,6 @@ export interface IssueCertificateRequest {
   nameConstraints?: string;
   basicConstraints?: string;
   certificatePolicy?: string;
+  templateId?: number | null;
 }
 
