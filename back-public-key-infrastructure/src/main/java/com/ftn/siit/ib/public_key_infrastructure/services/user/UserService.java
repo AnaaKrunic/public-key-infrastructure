@@ -9,15 +9,12 @@ import com.ftn.siit.ib.public_key_infrastructure.dtos.CreateCAUserDTO;
 import com.ftn.siit.ib.public_key_infrastructure.dtos.ValidCAUserDTO;
 import com.ftn.siit.ib.public_key_infrastructure.entities.User;
 import com.ftn.siit.ib.public_key_infrastructure.entities.Role;
-import com.ftn.siit.ib.public_key_infrastructure.entities.UserRole;
-import com.ftn.siit.ib.public_key_infrastructure.repositories.OrganizationRepository;
 import com.ftn.siit.ib.public_key_infrastructure.repositories.UserRepository;
 import com.ftn.siit.ib.public_key_infrastructure.repositories.CertificateRepository;
 import com.ftn.siit.ib.public_key_infrastructure.security.JwtUtil;
 import com.ftn.siit.ib.public_key_infrastructure.services.EmailService;
 import com.ftn.siit.ib.public_key_infrastructure.services.MFAService;
 import com.ftn.siit.ib.public_key_infrastructure.services.PasswordBreachService;
-import com.ftn.siit.ib.public_key_infrastructure.services.PasswordValidator;
 import com.ftn.siit.ib.public_key_infrastructure.services.CertificateService;
 import com.ftn.siit.ib.public_key_infrastructure.entities.Certificate;
 import com.ftn.siit.ib.public_key_infrastructure.entities.CertificateStatus;
@@ -324,6 +321,10 @@ public class UserService implements IUserService {
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
         if (!dto.getRefreshToken().equals(user.getRefreshToken())) {
+            // Refresh Token Automatic Reuse Detection: invalidate current token family
+            user.setRefreshToken(null);
+            user.setRefreshTokenExpiration(null);
+            userRepository.save(user);
             throw new RuntimeException("Invalid refresh token");
         }
 

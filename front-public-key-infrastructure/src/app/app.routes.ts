@@ -42,6 +42,12 @@ export const routes: Routes = [
     canActivate: [authGuard],
     data: { roles: ['CA_USER'] as Role[] }
   },
+  { 
+    path: 'ca/templates', 
+    loadComponent: () => import('./components/ca-user/template-management/template-management.component').then(m => m.TemplateManagementComponent), 
+    canActivate: [authGuard],
+    data: { roles: ['CA_USER', 'ADMIN'] as Role[] }
+  },
   
   // EE User routes
   { 
@@ -57,9 +63,16 @@ export const routes: Routes = [
     data: { roles: ['EE_USER'] as Role[] }
   },
   
-  // Role-based redirect
+  // Dashboard route
   { 
     path: 'dashboard', 
+    loadComponent: () => import('./dashboard/dashboard.component').then(m => m.DashboardComponent), 
+    canActivate: [authGuard] 
+  },
+  
+  // Role-based redirect
+  { 
+    path: 'role-redirect', 
     loadComponent: () => import('./components/common/role-redirect/role-redirect.component').then(m => m.RoleRedirectComponent), 
     canActivate: [authGuard] 
   },

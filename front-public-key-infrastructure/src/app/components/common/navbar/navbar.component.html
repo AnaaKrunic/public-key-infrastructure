@@ -11,6 +11,7 @@
         <li><a routerLink="/admin/certificates" routerLinkActive="active">All Certificates</a></li>
         <li><a routerLink="/admin/issue" routerLinkActive="active">Issue Certificate</a></li>
         <li><a routerLink="/admin/ca-users" routerLinkActive="active">CA User Management</a></li>
+        <li><a routerLink="/ca/templates" routerLinkActive="active">Template Management</a></li>
       </ul>
     </div>
 
@@ -20,6 +21,7 @@
       <ul class="menu-list">
         <li><a routerLink="/ca/certificates" routerLinkActive="active">Signed Certificates</a></li>
         <li><a routerLink="/ca/pending-csrs" routerLinkActive="active">Pending CSRs</a></li>
+        <li><a routerLink="/ca/templates" routerLinkActive="active">Template Management</a></li>
         <li><a routerLink="/admin/issue" routerLinkActive="active">Issue Certificate</a></li>
       </ul>
     </div>
@@ -44,7 +46,7 @@
   </div>
 
   <div class="navbar-user">
-    <div class="user-info">
+    <div class="user-info" (click)="goToDashboard()">
       <span class="user-name">{{ getDisplayName() }}</span>
       <span class="user-role">{{ getRoleDisplayName() }}</span>
     </div>

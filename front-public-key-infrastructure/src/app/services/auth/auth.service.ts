@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { BehaviorSubject, Observable, of } from 'rxjs';
+import { BehaviorSubject, Observable, of, throwError } from 'rxjs';
 import { map, catchError, tap, switchMap } from 'rxjs/operators';
 import { LoginRequest } from '../../models/LoginRequest';
 import { RegisterRequest } from '../../models/RegisterRequest';
@@ -71,18 +71,24 @@ export class AuthService {
     return this.http.post<any>(`${this.API_BASE_URL}/auth/login`, loginRequest)
       .pipe(
         tap((response: any) => {
-          // Extract token from response object
-          const token = response.accessToken;
-          
-          // Store the token and create auth state
+          // Expecting accessToken, refreshToken, expiresIn (seconds for access)
+          const accessToken: string = response.accessToken;
+          const refreshToken: string = response.refreshToken;
+          const expiresInSec: number = response.expiresIn ?? (15 * 60);
+
+          const now = new Date().getTime();
+          const accessExpiresAt = new Date(now + expiresInSec * 1000).toISOString();
+          // Align with backend 7 days refresh policy
+          const refreshExpiresAt = new Date(now + 7 * 24 * 60 * 60 * 1000).toISOString();
+
           const authState: AuthState = {
-            accessToken: token,
-            accessExpiresAt: this.calculateTokenExpiry(),
-            refreshToken: null, // Backend doesn't return refresh token in this implementation
-            refreshExpiresAt: null,
-            user: null // Will be fetched separately
+            accessToken: accessToken,
+            accessExpiresAt: accessExpiresAt,
+            refreshToken: refreshToken,
+            refreshExpiresAt: refreshExpiresAt,
+            user: null
           };
-          
+
           this.authStateSubject.next(authState);
           this.isLoggedInSubject.next(true);
           localStorage.setItem(this.AUTH_STORAGE_KEY, JSON.stringify(authState));
@@ -184,9 +190,9 @@ export class AuthService {
   }
 
   private calculateTokenExpiry(): string {
-    // JWT tokens typically expire in 1 hour, so we'll set expiry to 1 hour from now
+    // Keep utility, but align with backend default (15 minutes)
     const expiryTime = new Date();
-    expiryTime.setHours(expiryTime.getHours() + 1);
+    expiryTime.setMinutes(expiryTime.getMinutes() + 15);
     return expiryTime.toISOString();
   }
 
@@ -201,14 +207,41 @@ export class AuthService {
     return new Date() >= expiryTime;
   }
 
-  // Method to refresh token (if backend supports it)
+  // Method to refresh token using backend rotation
   refreshToken(): Observable<string> {
-    // For now, we'll just return the current token
-    // In a real implementation, you'd call a refresh endpoint
-    const currentToken = this.getToken();
-    if (currentToken) {
-      return of(currentToken);
+    const currentState = this.authStateSubject.value;
+    if (!currentState?.refreshToken) {
+      return throwError(() => new Error('No refresh token available'));
     }
-    throw new Error('No token to refresh');
+
+    // Optional: check refresh token local expiry hint
+    if (currentState.refreshExpiresAt && new Date(currentState.refreshExpiresAt) <= new Date()) {
+      return throwError(() => new Error('Refresh token expired'));
+    }
+
+    return this.http.post<any>(`${this.API_BASE_URL}/auth/refresh`, { refreshToken: currentState.refreshToken })
+      .pipe(
+        tap((response: any) => {
+          const accessToken: string = response.accessToken;
+          const refreshToken: string = response.refreshToken;
+          const expiresInSec: number = response.expiresIn ?? (15 * 60);
+
+          const now = new Date().getTime();
+          const accessExpiresAt = new Date(now + expiresInSec * 1000).toISOString();
+          const refreshExpiresAt = new Date(now + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+          const updatedState: AuthState = {
+            ...currentState,
+            accessToken: accessToken,
+            accessExpiresAt: accessExpiresAt,
+            refreshToken: refreshToken,
+            refreshExpiresAt: refreshExpiresAt
+          };
+
+          this.authStateSubject.next(updatedState);
+          localStorage.setItem(this.AUTH_STORAGE_KEY, JSON.stringify(updatedState));
+        }),
+        map((response: any) => response.accessToken)
+      );
   }
 }

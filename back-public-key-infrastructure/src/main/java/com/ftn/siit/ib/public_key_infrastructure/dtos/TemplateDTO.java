@@ -12,13 +12,13 @@ public class TemplateDTO {
     
     private Long id;
     private String name;
-    private UserDTO caIssuer;
-    private CertificateDTO issuerCertificate;
-    private String commonNamePattern;
-    private String sanPattern;
-    private Integer ttlDays;
+    private String caIssuerSerialNumber;
+    private String cnRegex;
+    private String sanRegex;
+    private Integer ttl;
     private String keyUsage;
     private String extendedKeyUsage;
+    private UserDTO createdBy;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     
@@ -30,14 +30,5 @@ public class TemplateDTO {
         private String email;
         private String firstName;
         private String lastName;
-    }
-    
-    @Data
-    @NoArgsConstructor
-    @AllArgsConstructor
-    public static class CertificateDTO {
-        private Long id;
-        private String serialNumber;
-        private String subjectCN;
     }
 }
