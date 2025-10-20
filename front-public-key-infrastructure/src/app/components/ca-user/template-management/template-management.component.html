@@ -82,9 +82,10 @@
             [class.is-invalid]="getFormControl('caIssuerSerialNumber')?.invalid && getFormControl('caIssuerSerialNumber')?.touched">
             <option value="">Select CA Issuer</option>
             <option *ngFor="let ca of availableCAs" [value]="ca.serialNumber">
-              {{ ca.subjectCN }} ({{ ca.serialNumber }})
+              {{ ca.subjectCN }} ({{ ca.certificateType }}) ({{ ca.serialNumber }})
             </option>
           </select>
+          <div *ngIf="caLoadError" class="invalid-feedback" style="display:block">{{ caLoadError }}</div>
           <div *ngIf="getFormControl('caIssuerSerialNumber')?.invalid && getFormControl('caIssuerSerialNumber')?.touched" class="invalid-feedback">
             CA issuer is required
           </div>
@@ -145,32 +146,38 @@
       <div class="form-row">
         <div class="form-group">
           <label for="keyUsage">Key Usage *</label>
-          <input 
-            type="text" 
-            id="keyUsage"
-            formControlName="keyUsage" 
-            placeholder="digitalSignature,keyEncipherment"
-            class="form-control"
-            [class.is-invalid]="getFormControl('keyUsage')?.invalid && getFormControl('keyUsage')?.touched">
-          <small class="form-text text-muted">Comma-separated list of key usage values</small>
-          <div *ngIf="getFormControl('keyUsage')?.invalid && getFormControl('keyUsage')?.touched" class="invalid-feedback">
-            Key Usage is required
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-select formControlName="keyUsage" multiple placeholder="Select key usages">
+              <mat-option *ngFor="let opt of keyUsageOptions" [value]="opt.value">{{ opt.label }}</mat-option>
+            </mat-select>
+          </mat-form-field>
+          <div class="chips">
+            <mat-chip *ngFor="let ku of getFormControl('keyUsage')?.value" [removable]="true">
+              {{ getLabelFromKeyUsage(ku) }}
+              <button mat-icon-button matChipRemove type="button" (click)="removeFromControl('keyUsage', ku)">
+                <mat-icon>cancel</mat-icon>
+              </button>
+            </mat-chip>
           </div>
+          <div *ngIf="getFormControl('keyUsage')?.invalid && getFormControl('keyUsage')?.touched" class="invalid-feedback" style="display:block">Key Usage is required</div>
         </div>
         
         <div class="form-group">
           <label for="extendedKeyUsage">Extended Key Usage *</label>
-          <input 
-            type="text" 
-            id="extendedKeyUsage"
-            formControlName="extendedKeyUsage" 
-            placeholder="clientAuth,emailProtection"
-            class="form-control"
-            [class.is-invalid]="getFormControl('extendedKeyUsage')?.invalid && getFormControl('extendedKeyUsage')?.touched">
-          <small class="form-text text-muted">Comma-separated list of extended key usage values</small>
-          <div *ngIf="getFormControl('extendedKeyUsage')?.invalid && getFormControl('extendedKeyUsage')?.touched" class="invalid-feedback">
-            Extended Key Usage is required
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-select formControlName="extendedKeyUsage" multiple placeholder="Select extended key usages">
+              <mat-option *ngFor="let opt of extendedKeyUsageOptions" [value]="opt.value">{{ opt.label }}</mat-option>
+            </mat-select>
+          </mat-form-field>
+          <div class="chips">
+            <mat-chip *ngFor="let eku of getFormControl('extendedKeyUsage')?.value" [removable]="true">
+              {{ getLabelFromExtendedKeyUsage(eku) }}
+              <button mat-icon-button matChipRemove type="button" (click)="removeFromControl('extendedKeyUsage', eku)">
+                <mat-icon>cancel</mat-icon>
+              </button>
+            </mat-chip>
           </div>
+          <div *ngIf="getFormControl('extendedKeyUsage')?.invalid && getFormControl('extendedKeyUsage')?.touched" class="invalid-feedback" style="display:block">Extended Key Usage is required</div>
         </div>
       </div>
       

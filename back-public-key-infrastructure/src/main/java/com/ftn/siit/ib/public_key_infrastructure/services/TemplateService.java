@@ -49,8 +49,10 @@ public class TemplateService {
      * Creates a new certificate template.
      */
     public TemplateDTO createTemplate(CreateTemplateDTO dto, User caUser) {
-        // Validate user has permission
-        if (!caUser.getRole().equals("CA_USER") && !caUser.getRole().equals("ADMIN")) {
+        // Validate user has permission (support enum Role or string)
+        Object roleObj = caUser.getRole();
+        String roleName = roleObj == null ? null : roleObj.toString();
+        if (roleName == null || !("CA_USER".equals(roleName) || "ADMIN".equals(roleName))) {
             throw new AccessDeniedException("Only CA_USER and ADMIN can create templates");
         }
         

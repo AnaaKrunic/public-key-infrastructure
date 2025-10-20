@@ -2,6 +2,7 @@ package com.ftn.siit.ib.public_key_infrastructure.controllers;
 
 import com.ftn.siit.ib.public_key_infrastructure.dtos.*;
 import com.ftn.siit.ib.public_key_infrastructure.services.TemplateService;
+import com.ftn.siit.ib.public_key_infrastructure.services.user.UserService;
 import com.ftn.siit.ib.public_key_infrastructure.entities.User;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -20,13 +21,18 @@ public class TemplateController {
     @Autowired
     private TemplateService templateService;
 
+    @Autowired
+    private UserService userService;
+
     // ===== Template Management =====
     
     @PostMapping("/create")
     @PreAuthorize("hasAnyRole('CA_USER', 'ADMIN')")
     public ResponseEntity<?> createTemplate(@RequestBody CreateTemplateDTO dto, Authentication authentication) {
         try {
-            User user = (User) authentication.getPrincipal();
+            // Principal is typically username/email (String) or UserDetails; resolve our User entity by email
+            String email = authentication.getName();
+            User user = userService.findByEmail(email);
             TemplateDTO template = templateService.createTemplate(dto, user);
             return ResponseEntity.ok(template);
         } catch (Exception e) {
@@ -74,7 +80,8 @@ public class TemplateController {
             @RequestBody UpdateTemplateDTO dto,
             Authentication authentication) {
         try {
-            User user = (User) authentication.getPrincipal();
+            String email = authentication.getName();
+            User user = userService.findByEmail(email);
             TemplateDTO template = templateService.updateTemplate(id, dto, user);
             return ResponseEntity.ok(template);
         } catch (Exception e) {
@@ -86,7 +93,8 @@ public class TemplateController {
     @PreAuthorize("hasAnyRole('CA_USER', 'ADMIN')")
     public ResponseEntity<?> deleteTemplate(@PathVariable Long id, Authentication authentication) {
         try {
-            User user = (User) authentication.getPrincipal();
+            String email = authentication.getName();
+            User user = userService.findByEmail(email);
             templateService.deleteTemplate(id, user);
             return ResponseEntity.ok(Map.of("message", "Template deleted successfully"));
         } catch (Exception e) {
