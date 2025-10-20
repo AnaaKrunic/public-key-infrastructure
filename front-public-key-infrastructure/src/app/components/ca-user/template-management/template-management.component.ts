@@ -163,67 +163,6 @@ export class TemplateManagementComponent implements OnInit {
     }
   }
 
-  editTemplate(template: Template) {
-    this.editingTemplate = template;
-    this.templateForm.patchValue({
-      name: template.name,
-      cnRegex: template.cnRegex,
-      sanRegex: template.sanRegex,
-      ttl: template.ttl,
-      keyUsage: this.toArray(template.keyUsage),
-      extendedKeyUsage: this.toArray(template.extendedKeyUsage)
-    });
-  }
-
-  updateTemplate() {
-    if (this.templateForm.valid && this.editingTemplate) {
-      const dto = {
-        name: this.templateForm.value.name,
-        cnRegex: this.templateForm.value.cnRegex,
-        sanRegex: this.templateForm.value.sanRegex,
-        ttl: this.templateForm.value.ttl,
-        keyUsage: this.toCommaSeparated(this.templateForm.value.keyUsage),
-        extendedKeyUsage: this.toCommaSeparated(this.templateForm.value.extendedKeyUsage)
-      };
-      
-      this.templateService.updateTemplate(this.editingTemplate.id, dto).subscribe({
-        next: (updatedTemplate) => {
-          const index = this.templates.findIndex(t => t.id === updatedTemplate.id);
-          if (index !== -1) {
-            this.templates[index] = updatedTemplate;
-          }
-          this.cancelEdit();
-          this.toastr.success('Template updated successfully', 'Success');
-        },
-        error: (error) => {
-          this.toastr.error(error.error?.error || 'Failed to update template', 'Error');
-          console.error('Error updating template:', error);
-        }
-      });
-    }
-  }
-
-  deleteTemplate(template: Template) {
-    if (confirm(`Are you sure you want to delete template "${template.name}"?`)) {
-      this.templateService.deleteTemplate(template.id).subscribe({
-        next: () => {
-          this.templates = this.templates.filter(t => t.id !== template.id);
-          this.toastr.success('Template deleted successfully', 'Success');
-        },
-        error: (error) => {
-          this.toastr.error(error.error?.error || 'Failed to delete template', 'Error');
-          console.error('Error deleting template:', error);
-        }
-      });
-    }
-  }
-
-  cancelEdit() {
-    this.editingTemplate = null;
-    this.templateForm.reset();
-    this.templateForm.patchValue({ ttl: 365 });
-  }
-
   testRegex(pattern: string, testValue: string): boolean {
     try {
       const regex = new RegExp(pattern);
@@ -240,11 +179,6 @@ export class TemplateManagementComponent implements OnInit {
   private toCommaSeparated(values: string[] | null | undefined): string {
     if (!values || values.length === 0) return '';
     return values.join(',');
-  }
-
-  private toArray(value: string | null | undefined): string[] {
-    if (!value) return [];
-    return value.split(',').map(v => v.trim()).filter(v => !!v);
   }
 
   getLabelFromKeyUsage(value: string): string {

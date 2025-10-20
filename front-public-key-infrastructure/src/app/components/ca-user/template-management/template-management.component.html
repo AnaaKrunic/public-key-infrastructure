@@ -14,14 +14,6 @@
     <div *ngFor="let template of templates" class="template-card">
       <div class="template-header">
         <h4>{{ template.name }}</h4>
-        <div class="template-actions">
-          <button class="btn btn-sm btn-outline-primary" (click)="editTemplate(template)">
-            <i class="fas fa-edit"></i> Edit
-          </button>
-          <button class="btn btn-sm btn-outline-danger" (click)="deleteTemplate(template)">
-            <i class="fas fa-trash"></i> Delete
-          </button>
-        </div>
       </div>
       
       <div class="template-details">
@@ -57,7 +49,7 @@
   <div class="template-form">
     <h3>{{ editingTemplate ? 'Edit Template' : 'Create New Template' }}</h3>
     
-    <form [formGroup]="templateForm" (ngSubmit)="editingTemplate ? updateTemplate() : createTemplate()">
+    <form [formGroup]="templateForm" (ngSubmit)="createTemplate()">
       <div class="form-row">
         <div class="form-group">
           <label for="name">Template Name *</label>
