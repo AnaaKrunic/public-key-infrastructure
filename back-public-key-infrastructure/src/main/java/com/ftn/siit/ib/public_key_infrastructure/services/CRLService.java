@@ -10,6 +10,7 @@ import com.ftn.siit.ib.public_key_infrastructure.services.crypto.EncryptionServi
 import com.ftn.siit.ib.public_key_infrastructure.services.crypto.UserKeyService;
 import com.ftn.siit.ib.public_key_infrastructure.dtos.RevokedCertificateResponseDTO;
 import com.ftn.siit.ib.public_key_infrastructure.dtos.RevokeCertificateRequestDTO;
+import java.util.ArrayList;
 import com.ftn.siit.ib.public_key_infrastructure.dtos.CertificateDTO;
 import org.bouncycastle.cert.X509CRLHolder;
 import org.hibernate.Hibernate;
@@ -518,56 +519,60 @@ public class CRLService {
                 .map(this::convertToResponseDTO)
                 .toList();
     }
+    public List<Certificate> getAllChildren(Certificate parent) {
+        List<Certificate> result = new ArrayList<>();
+        findChildrenRecursive(parent, result);
+        return result;
+    }
 
-    /**
-     * Revokes a certificate.
-     * 
-     * @param request The revocation request
-     * @param requesterId The ID of the user requesting revocation
-     * @param requesterRole The role of the user requesting revocation
-     */
+    private void findChildrenRecursive(Certificate parent, List<Certificate> result) {
+        List<Certificate> children = certificateRepository.findByIssuerCertificate(parent);
+        for (Certificate child : children) {
+            result.add(child);
+            findChildrenRecursive(child, result); // recursion
+        }
+    }
+
+    @Transactional
     public void revokeCertificate(RevokeCertificateRequestDTO request, Long requesterId, Role requesterRole) {
-        // Find the certificate
+        // 1. Pronađi sertifikat
         Certificate certificate = certificateRepository.findBySerialNumber(request.getSerialNumber())
                 .orElseThrow(() -> new RuntimeException("Certificate not found!"));
 
-        // Check if already revoked
+        // 2. Validacija korisničke uloge
+        if (requesterRole == Role.CA_USER ||
+                (requesterRole == Role.EE_USER && certificate.getCertificateType() != CertificateType.END_ENTITY)) {
+            throw new RuntimeException("Invalid user role for certificate revocation!");
+        }
+
+        // 3. Ako je već opozvan — prekini
         if (revokedCertificateRepository.existsByCertificate(certificate)) {
             throw new RuntimeException("Certificate is already revoked!");
         }
 
+        // 4. Nađi sve potomke rekurzivno
+        List<Certificate> children = getAllChildren(certificate);
 
-        // Authorization checks based on user role
-        if (requesterRole == Role.ADMIN) {
-            // ADMIN can revoke any certificate ✅
-            System.out.println("DEBUG: Admin user can revoke any certificate");
-        } else if (requesterRole == Role.CA_USER) {
-            // CA users are NOT allowed to revoke certificates per specification ❌
-            throw new RuntimeException(
-                "Access denied: CA users cannot revoke certificates. " +
-                "Only administrators and certificate owners (EE users) can revoke certificates."
-            );
-        } else if (requesterRole == Role.EE_USER) {
-            // EE users can only revoke certificates in their myCertificates list
-            User requester = userRepository.findById(requesterId)
-                    .orElseThrow(() -> new RuntimeException("Requester not found"));
-            
-            // Check if certificate is in user's myCertificates collection
-            boolean ownsIt = requester.getMyCertificates().stream()
-                    .anyMatch(cert -> cert.getId().equals(certificate.getId()));
-            
-            if (!ownsIt) {
-                throw new RuntimeException(
-                    "Access denied: EE users can only revoke their own certificates. " +
-                    "This certificate does not belong to you."
-                );
+        // 5. Opozovi sve potomke (ako nisu već)
+        for (Certificate child : children) {
+            if (child.getStatus() != CertificateStatus.REVOKED) {
+                RevokedCertificate revokedChild = new RevokedCertificate();
+                revokedChild.setCertificate(child);
+                revokedChild.setIssuerCertificate(child.getIssuerCertificate());
+                revokedChild.setRevokedBy(child.getSignedBy());
+                revokedChild.setCertificateSerialNumber(child.getSerialNumber());
+                revokedChild.setRevocationReason(request.getRevocationReason());
+
+                child.setStatus(CertificateStatus.REVOKED);
+                child.setRevocationReason(request.getRevocationReason().name());
+                child.setRevocationDate(LocalDateTime.now());
+
+                certificateRepository.save(child);
+                revokedCertificateRepository.save(revokedChild);
             }
-            System.out.println("DEBUG: EE user is revoking their own certificate");
-        } else {
-            throw new RuntimeException("Invalid user role for certificate revocation!");
         }
 
-        // Create revoked certificate record
+        // 6. Na kraju opozovi i sam sertifikat
         RevokedCertificate revokedCertificate = new RevokedCertificate();
         revokedCertificate.setCertificate(certificate);
         revokedCertificate.setIssuerCertificate(certificate.getIssuerCertificate());
@@ -575,12 +580,10 @@ public class CRLService {
         revokedCertificate.setCertificateSerialNumber(certificate.getSerialNumber());
         revokedCertificate.setRevocationReason(request.getRevocationReason());
 
-        // Update certificate status
         certificate.setStatus(CertificateStatus.REVOKED);
         certificate.setRevocationReason(request.getRevocationReason().name());
         certificate.setRevocationDate(LocalDateTime.now());
 
-        // Save changes
         certificateRepository.save(certificate);
         revokedCertificateRepository.save(revokedCertificate);
     }

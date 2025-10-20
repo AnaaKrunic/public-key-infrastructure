@@ -34,6 +34,9 @@ public class MasterKeyService {
 
     private final MasterKeyRepository masterKeyRepository;
     
+    @Value("${security.master-key}")
+    private String masterKeyBase64;
+    
     @Value("${app.security.server-key.file:}")
     private String serverKeyFile;
     
@@ -198,14 +201,13 @@ public class MasterKeyService {
     }
 
     /**
-     * Generates a new random master key.
+     * Loads the master key from the security.master-key property.
+     * This ensures the same master key is used across server restarts.
      * 
-     * @return A new 256-bit master key
+     * @return The consistent master key from properties
      */
     private byte[] generateNewMasterKey() {
-        byte[] key = new byte[32]; // 256 bits
-        new SecureRandom().nextBytes(key);
-        return key;
+        return Base64.getDecoder().decode(masterKeyBase64);
     }
 
     /**

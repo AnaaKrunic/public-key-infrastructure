@@ -400,8 +400,11 @@ public class CertificateService {
             if (!isFromCSR &&
                     dto.getSubjectO().equals(requester.getOrganization()) &&
                     issuerCert.getSubjectO().equals(requester.getOrganization())) {
-                giveAccess = false;
+                    System.out.printf("DEBUG: CA_USER can only create intermediate certificates using certificates from their organization: %s, %s, %s", dto.getSubjectO(), requester.getOrganization(), issuerCert.getSubjectO());
+
+                giveAccess = true;
             }
+            
             if (!giveAccess) {
                 throw new UnauthorizedException("CA_USER can only create intermediate certificates using certificates from their organization");
             }
