@@ -3,11 +3,13 @@ package com.ftn.siit.ib.public_key_infrastructure.services;
 import com.ftn.siit.ib.public_key_infrastructure.dtos.*;
 import com.ftn.siit.ib.public_key_infrastructure.entities.Certificate;
 import com.ftn.siit.ib.public_key_infrastructure.entities.CertificateStatus;
+import com.ftn.siit.ib.public_key_infrastructure.entities.CertificateTemplate;
 import com.ftn.siit.ib.public_key_infrastructure.entities.CertificateType;
 import com.ftn.siit.ib.public_key_infrastructure.entities.Role;
 import com.ftn.siit.ib.public_key_infrastructure.entities.User;
 import com.ftn.siit.ib.public_key_infrastructure.exceptions.*;
 import com.ftn.siit.ib.public_key_infrastructure.repositories.CertificateRepository;
+import com.ftn.siit.ib.public_key_infrastructure.repositories.CertificateTemplateRepository;
 import com.ftn.siit.ib.public_key_infrastructure.repositories.UserRepository;
 import com.ftn.siit.ib.public_key_infrastructure.services.crypto.*;
 import org.bouncycastle.asn1.x500.X500Name;
@@ -44,6 +46,7 @@ import java.util.HashSet;
 public class CertificateService {
 
     private final CertificateRepository certificateRepository;
+    private final CertificateTemplateRepository templateRepository;
     private final UserRepository userRepository;
     private final ValidationService validationService;
     private final CertificateGeneratorService certificateGeneratorService;
@@ -57,6 +60,7 @@ public class CertificateService {
 
     public CertificateService(
             CertificateRepository certificateRepository,
+            CertificateTemplateRepository templateRepository,
             UserRepository userRepository,
             ValidationService validationService,
             CertificateGeneratorService certificateGeneratorService,
@@ -68,6 +72,7 @@ public class CertificateService {
             MasterKeyService masterKeyService,
             UserKeyService userKeyService) {
         this.certificateRepository = certificateRepository;
+        this.templateRepository = templateRepository;
         this.userRepository = userRepository;
         this.validationService = validationService;
         this.certificateGeneratorService = certificateGeneratorService;
@@ -397,13 +402,22 @@ public class CertificateService {
             }
         }
 
-        // If templateId provided, validate against template constraints
+        // If templateId provided, validate against template constraints and extensions policy
+        CertificateTemplate template = null;
         if (dto.getTemplateId() != null) {
-            // TODO: Implement template validation when TemplateService is available
-            // CertificateTemplate template = templateRepository.findById(dto.getTemplateId())
-            //     .orElseThrow(() -> new NotFoundException("Template not found"));
-            // validationService.validateTemplateConstraints(dto, template);
+            template = templateRepository.findById(dto.getTemplateId())
+                .orElseThrow(() -> new NotFoundException("Template not found"));
+            validationService.validateTemplateConstraints(template, dto);
         }
+        
+        // Validate template and extensions policy
+        validationService.validateTemplateAndExtensionsPolicy(
+            template, 
+            dto.getKeyUsage(), 
+            dto.getExtendedKeyUsage(), 
+            issuer, 
+            CertificateType.END_ENTITY
+        );
 
         // Validate issuer certificate
         validationService.validateIssuerCertificate(issuer);
@@ -444,13 +458,51 @@ public class CertificateService {
         // Parse issuer's public key
         java.security.PublicKey issuerPublicKey = parsePublicKeyFromPEM(issuer.getPublicKey());
 
+        // Combine template and user extensions
+        List<String> finalKeyUsage = new ArrayList<>();
+        List<String> finalExtendedKeyUsage = new ArrayList<>();
+        
+        // Add template extensions first
+        if (template != null) {
+            if (template.getKeyUsage() != null && !template.getKeyUsage().trim().isEmpty()) {
+                String[] templateKeyUsage = template.getKeyUsage().split(",");
+                for (String usage : templateKeyUsage) {
+                    finalKeyUsage.add(usage.trim());
+                }
+            }
+            
+            if (template.getExtendedKeyUsage() != null && !template.getExtendedKeyUsage().trim().isEmpty()) {
+                String[] templateExtendedKeyUsage = template.getExtendedKeyUsage().split(",");
+                for (String usage : templateExtendedKeyUsage) {
+                    finalExtendedKeyUsage.add(usage.trim());
+                }
+            }
+        }
+        
+        // Add user-requested extensions (avoiding duplicates)
+        if (dto.getKeyUsage() != null) {
+            for (String usage : dto.getKeyUsage()) {
+                if (!finalKeyUsage.contains(usage)) {
+                    finalKeyUsage.add(usage);
+                }
+            }
+        }
+        
+        if (dto.getExtendedKeyUsage() != null) {
+            for (String usage : dto.getExtendedKeyUsage()) {
+                if (!finalExtendedKeyUsage.contains(usage)) {
+                    finalExtendedKeyUsage.add(usage);
+                }
+            }
+        }
+
         // Generate end-entity certificate
         System.out.println("DEBUG: About to generate end-entity certificate with validityDays=" + dto.getValidityDays());
         X509Certificate certificate;
         try {
             certificate = certificateGeneratorService.generateEndEntityCertificate(
                 keyPair, subjectDN, issuerDN, issuerPrivateKey, issuerPublicKey,
-                dto.getValidityDays(), dto.getKeyUsage(), dto.getExtendedKeyUsage(), 
+                dto.getValidityDays(), finalKeyUsage, finalExtendedKeyUsage, 
                 dto.getSubjectAlternativeNames(), dto.getCrlDistributionPoint()
             );
         } catch (Exception e) {
@@ -501,8 +553,8 @@ public class CertificateService {
         } catch (java.security.cert.CertificateEncodingException e) {
             throw new RuntimeException("Failed to encode certificate", e);
         }
-        certificateEntity.setKeyUsage(String.join(",", dto.getKeyUsage()));
-        certificateEntity.setExtendedKeyUsage(dto.getExtendedKeyUsage() != null ? String.join(",", dto.getExtendedKeyUsage()) : null);
+        certificateEntity.setKeyUsage(String.join(",", finalKeyUsage));
+        certificateEntity.setExtendedKeyUsage(finalExtendedKeyUsage.isEmpty() ? null : String.join(",", finalExtendedKeyUsage));
         certificateEntity.setSubjectAlternativeNames(dto.getSubjectAlternativeNames() != null ? String.join(",", dto.getSubjectAlternativeNames()) : null);
         // Owner removed - using many-to-many relationship now
         certificateEntity.setIssuerCertificate(issuer);

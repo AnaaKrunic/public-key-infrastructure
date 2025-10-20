@@ -15,10 +15,12 @@ import { MatDialog } from '@angular/material/dialog';
 import { ToastrService } from 'ngx-toastr';
 import { CertificatesService } from '../../../services/certificates/certificates.service';
 import { CertificateRequestsService } from '../../../services/certificates/certificate-requests.service';
+import { TemplateService } from '../../../services/template/template.service';
 import { AuthService } from '../../../services/auth/auth.service';
 import { CaUser } from '../../../models/CaUser';
 import { CertificateRequest } from '../../../models/CertificateRequest';
 import { CreateCertificateRequest } from '../../../models/CreateCertificateRequest';
+import { Template } from '../../../models/Template';
 import { KeyUsageValue } from '../../../models/KeyUsageValue';
 import { ExtendedKeyUsageValue } from '../../../models/ExtendedKeyUsageValue';
 
@@ -88,6 +90,41 @@ import { ExtendedKeyUsageValue } from '../../../models/ExtendedKeyUsageValue';
                 {{ cert.commonName }} - {{ cert.organization }} - {{ cert.organizationalUnit }} - {{ cert.serialNumber }}
               </option>
             </select>
+          </div>
+
+          <!-- Template Selection for CSR Upload -->
+          <div class="form-group" *ngIf="availableTemplates.length > 0">
+            <label for="templateSelectCSR">Template (Optional)</label>
+            <select 
+              id="templateSelectCSR" 
+              name="templateSelectCSR" 
+              (change)="onTemplateSelect($event)"
+              class="form-control">
+              <option value="">No Template</option>
+              <option *ngFor="let template of availableTemplates" [value]="template.id">
+                {{ template.name }}
+              </option>
+            </select>
+            <small class="form-hint">Select a template to apply validation rules to uploaded CSR</small>
+          </div>
+
+          <!-- Template Preview for CSR Upload -->
+          <div *ngIf="selectedTemplate" class="template-preview">
+            <h4>Template Preview</h4>
+            <div class="template-info">
+              <div class="template-detail">
+                <strong>Name:</strong> {{ selectedTemplate.name }}
+              </div>
+              <div class="template-detail">
+                <strong>CN Regex:</strong> <code>{{ selectedTemplate.cnRegex }}</code>
+              </div>
+              <div class="template-detail">
+                <strong>SAN Regex:</strong> <code>{{ selectedTemplate.sanRegex }}</code>
+              </div>
+              <div class="template-detail">
+                <strong>TTL:</strong> {{ selectedTemplate.ttl }} days
+              </div>
+            </div>
           </div>
 
           <div class="form-group">
@@ -162,6 +199,47 @@ import { ExtendedKeyUsageValue } from '../../../models/ExtendedKeyUsageValue';
             </select>
           </div>
 
+          <!-- Template Selection -->
+          <div class="form-group" *ngIf="availableTemplates.length > 0">
+            <label for="templateSelect">Template (Optional)</label>
+            <select 
+              id="templateSelect" 
+              name="templateSelect" 
+              (change)="onTemplateSelect($event)"
+              class="form-control">
+              <option value="">No Template</option>
+              <option *ngFor="let template of availableTemplates" [value]="template.id">
+                {{ template.name }}
+              </option>
+            </select>
+            <small class="form-hint">Select a template to automatically fill certificate extensions and validation rules</small>
+          </div>
+
+          <!-- Template Preview -->
+          <div *ngIf="selectedTemplate" class="template-preview">
+            <h4>Template Preview</h4>
+            <div class="template-info">
+              <div class="template-detail">
+                <strong>Name:</strong> {{ selectedTemplate.name }}
+              </div>
+              <div class="template-detail">
+                <strong>CN Regex:</strong> <code>{{ selectedTemplate.cnRegex }}</code>
+              </div>
+              <div class="template-detail">
+                <strong>SAN Regex:</strong> <code>{{ selectedTemplate.sanRegex }}</code>
+              </div>
+              <div class="template-detail">
+                <strong>TTL:</strong> {{ selectedTemplate.ttl }} days
+              </div>
+              <div class="template-detail">
+                <strong>Key Usage:</strong> {{ selectedTemplate.keyUsage }}
+              </div>
+              <div class="template-detail">
+                <strong>Extended Key Usage:</strong> {{ selectedTemplate.extendedKeyUsage }}
+              </div>
+            </div>
+          </div>
+
           <div class="form-row">
             <div class="form-group">
               <label for="commonName">Common Name (CN) *</label>
@@ -170,8 +248,13 @@ import { ExtendedKeyUsageValue } from '../../../models/ExtendedKeyUsageValue';
                 id="commonName" 
                 name="commonName" 
                 [(ngModel)]="commonName" 
+                (input)="validateCN(commonName, selectedTemplate?.cnRegex || '')"
                 required
-                class="form-control">
+                class="form-control"
+                [class.is-invalid]="cnValidationError">
+              <div *ngIf="cnValidationError" class="invalid-feedback">
+                {{ cnValidationError }}
+              </div>
             </div>
             <div class="form-group">
               <label for="organization">Organization (O) *</label>
@@ -646,6 +729,58 @@ import { ExtendedKeyUsageValue } from '../../../models/ExtendedKeyUsageValue';
       margin-top: 5px;
     }
 
+    .template-preview {
+      margin: 20px 0;
+      padding: 20px;
+      background-color: #f8f9fa;
+      border: 1px solid #e9ecef;
+      border-radius: 8px;
+    }
+
+    .template-preview h4 {
+      margin: 0 0 15px 0;
+      color: #495057;
+      font-size: 16px;
+    }
+
+    .template-info {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 10px;
+    }
+
+    .template-detail {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .template-detail strong {
+      color: #495057;
+      font-size: 13px;
+    }
+
+    .template-detail code {
+      background-color: #e9ecef;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      color: #dc3545;
+    }
+
+    .invalid-feedback {
+      display: block;
+      width: 100%;
+      margin-top: 0.25rem;
+      font-size: 0.875em;
+      color: #dc3545;
+    }
+
+    .is-invalid {
+      border-color: #dc3545;
+    }
+
     .error {
       color: #dc3545;
       background-color: #f8d7da;
@@ -696,6 +831,7 @@ export class RequestCertificateComponent implements OnInit {
 
   private certificatesService = inject(CertificatesService);
   private certificateRequestsService = inject(CertificateRequestsService);
+  private templateService = inject(TemplateService);
   private authService = inject(AuthService);
   private toastr = inject(ToastrService);
 
@@ -706,6 +842,12 @@ export class RequestCertificateComponent implements OnInit {
   activeTab = 'upload';
   error: string | null = null;
   success: string | null = null;
+  
+  // Template functionality
+  availableTemplates: Template[] = [];
+  selectedTemplate: Template | null = null;
+  cnValidationError: string = '';
+  sanValidationError: string = '';
   
   // CSR Upload
   csrFile: File | null = null;
@@ -1001,6 +1143,95 @@ export class RequestCertificateComponent implements OnInit {
   onCertificateChange(event: any) {
     const certificateId = event.target.value;
     this.selectedCertificate = this.signingCertificates.find(cert => cert.serialNumber === certificateId) || null;
+    
+    // Load templates for selected CA
+    if (certificateId) {
+      this.loadTemplatesForCA(certificateId);
+    } else {
+      this.availableTemplates = [];
+      this.selectedTemplate = null;
+    }
+  }
+  
+  loadTemplatesForCA(caSerialNumber: string) {
+    this.templateService.getTemplatesForCA(caSerialNumber).subscribe({
+      next: (templates) => {
+        this.availableTemplates = templates;
+      },
+      error: (error) => {
+        console.error('Error loading templates:', error);
+        this.toastr.error('Error loading templates');
+      }
+    });
+  }
+  
+  onTemplateSelect(event: any) {
+    const templateId = event.target.value;
+    if (templateId) {
+      this.selectedTemplate = this.availableTemplates.find(t => t.id.toString() === templateId) || null;
+      this.applyTemplate();
+    } else {
+      this.selectedTemplate = null;
+    }
+  }
+  
+  applyTemplate() {
+    if (this.selectedTemplate) {
+      // Apply template values to form
+      this.dateNotAfter = this.calculateNotAfterDate(this.selectedTemplate.ttl);
+      
+      // Set up regex validation
+      this.setupRegexValidation();
+    }
+  }
+  
+  setupRegexValidation() {
+    if (this.selectedTemplate) {
+      // CN validation
+      if (this.commonName) {
+        this.validateCN(this.commonName, this.selectedTemplate.cnRegex);
+      }
+      
+      // SAN validation
+      const sanExt = this.extensions.find(ext => ext.key === 'subjectAlternativeNames');
+      if (sanExt && sanExt.value && sanExt.value.length > 0) {
+        sanExt.value.forEach((san: string) => {
+          this.validateSAN(san, this.selectedTemplate!.sanRegex);
+        });
+      }
+    }
+  }
+  
+  validateCN(cn: string, regex: string) {
+    this.templateService.validateCN(cn, regex).subscribe({
+      next: (isValid) => {
+        this.cnValidationError = isValid ? '' : 'CN does not match template regex pattern';
+      },
+      error: (error) => {
+        this.cnValidationError = 'Error validating CN';
+        console.error('CN validation error:', error);
+      }
+    });
+  }
+  
+  validateSAN(san: string, regex: string) {
+    this.templateService.validateSAN(san, regex).subscribe({
+      next: (isValid) => {
+        if (!isValid) {
+          this.sanValidationError = 'SAN does not match template regex pattern';
+        }
+      },
+      error: (error) => {
+        this.sanValidationError = 'Error validating SAN';
+        console.error('SAN validation error:', error);
+      }
+    });
+  }
+  
+  calculateNotAfterDate(ttlDays: number): string {
+    const now = new Date();
+    const notAfterDate = new Date(now.getTime() + ttlDays * 24 * 60 * 60 * 1000);
+    return notAfterDate.toISOString().slice(0, 16);
   }
 
   revalidateDates() {
@@ -1022,6 +1253,10 @@ export class RequestCertificateComponent implements OnInit {
     this.privateKeyFileName = '';
     this.selectedCertificate = null;
     this.selectedCertificateId = '';
+    this.availableTemplates = [];
+    this.selectedTemplate = null;
+    this.cnValidationError = '';
+    this.sanValidationError = '';
     this.error = null;
     this.success = null;
     this.setDefaultDates();

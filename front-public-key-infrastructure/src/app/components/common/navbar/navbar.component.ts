@@ -68,4 +68,8 @@ export class NavbarComponent implements OnInit {
         return 'User';
     }
   }
+
+  goToDashboard(): void {
+    this.router.navigate(['/dashboard']);
+  }
 }

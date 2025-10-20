@@ -4,12 +4,14 @@ import { FormsModule } from '@angular/forms';
 import { combineLatest } from 'rxjs';
 import { CertificatesService } from '../../../services/certificates/certificates.service';
 import { AuthService } from '../../../services/auth/auth.service';
+import { TemplateService } from '../../../services/template/template.service';
 import { Certificate } from '../../../models/Certificate';
 import { IssueCertificateRequest } from '../../../models/IssueCertificateRequest';
 import { CertificateType } from '../../../models/CertificateType';
 import { Role } from '../../../models/Role';
 import { KeyUsageValue } from '../../../models/KeyUsageValue';
 import { ExtendedKeyUsageValue } from '../../../models/ExtendedKeyUsageValue';
+import { Template } from '../../../models/Template';
 
 @Component({
   selector: 'app-issue-certificate',
@@ -53,6 +55,7 @@ import { ExtendedKeyUsageValue } from '../../../models/ExtendedKeyUsageValue';
             id="signingCertificate" 
             name="signingCertificate" 
             [(ngModel)]="request.signingCertificate" 
+            (change)="onSigningCertificateChange()"
             [required]="selectedCertificateType !== 'ROOT'"
             class="form-control">
             <option value="">Select a signing certificate</option>
@@ -146,6 +149,61 @@ import { ExtendedKeyUsageValue } from '../../../models/ExtendedKeyUsageValue';
             name="notAfter" 
             [(ngModel)]="request.notAfter" 
             class="form-control">
+        </div>
+
+        <!-- Template Selection Section -->
+        <div class="form-group" *ngIf="availableTemplates.length > 0 && selectedCertificateType !== 'ROOT'">
+          <label for="templateSelect">Template (Optional)</label>
+          <select 
+            id="templateSelect" 
+            name="templateSelect" 
+            [(ngModel)]="selectedTemplateId" 
+            (change)="onTemplateChange()"
+            class="form-control">
+            <option value="">No template - manual configuration</option>
+            <option *ngFor="let template of availableTemplates" [value]="template.id">
+              {{ template.name }}
+            </option>
+          </select>
+          <small class="form-text">
+            <strong>Note:</strong> Selecting a template will pre-fill extensions and validation rules. You can still add additional extensions below.
+          </small>
+        </div>
+
+        <!-- Template Preview -->
+        <div *ngIf="selectedTemplate" class="template-preview">
+          <h4>Selected Template: {{ selectedTemplate.name }}</h4>
+          <div class="info-box">
+            <strong>ℹ️ Note:</strong> This template provides default extensions and validation rules. 
+            You can add additional extensions below (in the "Certificate Extensions" section), 
+            as long as the total set doesn't violate the signing certificate's policy.
+          </div>
+          <div class="template-info">
+            <div class="template-detail">
+              <strong>CA Issuer:</strong>
+              <code>{{ selectedTemplate.caIssuerSerialNumber }}</code>
+            </div>
+            <div class="template-detail">
+              <strong>CN Pattern:</strong>
+              <code>{{ selectedTemplate.cnRegex }}</code>
+            </div>
+            <div class="template-detail">
+              <strong>SAN Pattern:</strong>
+              <code>{{ selectedTemplate.sanRegex }}</code>
+            </div>
+            <div class="template-detail">
+              <strong>Max Validity:</strong>
+              <code>{{ selectedTemplate.ttl }} days</code>
+            </div>
+            <div class="template-detail">
+              <strong>Key Usage:</strong>
+              <code>{{ selectedTemplate.keyUsage }}</code>
+            </div>
+            <div class="template-detail">
+              <strong>Extended Key Usage:</strong>
+              <code>{{ selectedTemplate.extendedKeyUsage }}</code>
+            </div>
+          </div>
         </div>
 
         <!-- Certificate Extensions Section -->
@@ -467,14 +525,75 @@ import { ExtendedKeyUsageValue } from '../../../models/ExtendedKeyUsageValue';
     .btn-danger:hover:not(:disabled) {
       background-color: #c82333;
     }
+
+    .template-preview {
+      margin: 20px 0;
+      padding: 20px;
+      background-color: #f8f9fa;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+    }
+
+    .template-preview h4 {
+      margin: 0 0 15px 0;
+      color: #495057;
+      font-size: 16px;
+    }
+
+    .template-info {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 10px;
+    }
+
+    .template-detail {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .template-detail strong {
+      color: #495057;
+      font-size: 13px;
+    }
+
+    .template-detail code {
+      background-color: #e9ecef;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 12px;
+      word-break: break-all;
+    }
+
+    .info-box {
+      background-color: #e7f3ff;
+      border-left: 4px solid #2196F3;
+      padding: 12px 15px;
+      margin-bottom: 15px;
+      border-radius: 4px;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .info-box strong {
+      color: #1976D2;
+      display: block;
+      margin-bottom: 5px;
+    }
   `]
 })
 export class IssueCertificateComponent implements OnInit {
   private certificatesService = inject(CertificatesService);
   private authService = inject(AuthService);
+  private templateService = inject(TemplateService);
 
   selectedCertificateType: string = '';
   currentUserRole: string | null = null;
+  
+  // Template-related properties
+  availableTemplates: Template[] = [];
+  selectedTemplate: Template | null = null;
+  selectedTemplateId: string = '';
   
   request: IssueCertificateRequest = {
     signingCertificate: '',
@@ -491,7 +610,8 @@ export class IssueCertificateComponent implements OnInit {
     issuerAlternativeNames: [],
     nameConstraints: '',
     basicConstraints: '',
-    certificatePolicy: ''
+    certificatePolicy: '',
+    templateId: null
   };
 
   signingCertificates: Certificate[] = [];
@@ -563,7 +683,104 @@ export class IssueCertificateComponent implements OnInit {
     // Clear signing certificate when switching to Root CA
     if (this.selectedCertificateType === 'ROOT') {
       this.request.signingCertificate = '';
+      this.clearTemplateSelection();
     }
+  }
+
+  onSigningCertificateChange(): void {
+    // Load templates for selected signing certificate
+    if (this.request.signingCertificate) {
+      this.loadTemplatesForCA(this.request.signingCertificate);
+    } else {
+      this.clearTemplateSelection();
+    }
+  }
+
+  onTemplateChange(): void {
+    if (this.selectedTemplateId) {
+      this.selectedTemplate = this.availableTemplates.find(t => t.id.toString() === this.selectedTemplateId) || null;
+      if (this.selectedTemplate) {
+        this.applyTemplateToRequest();
+      }
+    } else {
+      this.clearTemplateSelection();
+    }
+  }
+
+  loadTemplatesForCA(caSerialNumber: string): void {
+    this.templateService.getTemplatesForCA(caSerialNumber).subscribe({
+      next: (templates) => {
+        this.availableTemplates = templates;
+      },
+      error: (error) => {
+        console.error('Error loading templates:', error);
+        this.availableTemplates = [];
+      }
+    });
+  }
+
+  applyTemplateToRequest(): void {
+    if (!this.selectedTemplate) return;
+
+    // Apply template's default extensions to the request
+    if (this.selectedTemplate.keyUsage) {
+      const templateKeyUsage = this.selectedTemplate.keyUsage.split(',').map(s => s.trim());
+      // Merge with existing key usage, avoiding duplicates
+      this.request.keyUsage = [...new Set([...this.request.keyUsage, ...templateKeyUsage])];
+    }
+
+    if (this.selectedTemplate.extendedKeyUsage) {
+      const templateExtendedKeyUsage = this.selectedTemplate.extendedKeyUsage.split(',').map(s => s.trim());
+      // Merge with existing extended key usage, avoiding duplicates
+      this.request.extendedKeyUsage = [...new Set([...this.request.extendedKeyUsage, ...templateExtendedKeyUsage])];
+    }
+
+    // Set template ID in request
+    this.request.templateId = this.selectedTemplate.id;
+  }
+
+  clearTemplateSelection(): void {
+    this.selectedTemplate = null;
+    this.selectedTemplateId = '';
+    this.availableTemplates = [];
+    this.request.templateId = null;
+  }
+
+  validateExtensionsAgainstPolicy(): boolean {
+    if (!this.selectedTemplate) {
+      return true; // No template, no additional validation needed
+    }
+
+    // Get final extensions (template + user extensions)
+    const finalKeyUsage = [...new Set([...this.getTemplateKeyUsage(), ...(this.request.keyUsage || [])])];
+    const finalExtendedKeyUsage = [...new Set([...this.getTemplateExtendedKeyUsage(), ...(this.request.extendedKeyUsage || [])])];
+
+    // Validate that end-entity certificates don't have CA-specific key usage
+    if (this.selectedCertificateType === 'END_ENTITY') {
+      const forbiddenKeyUsage = ['keyCertSign', 'cRLSign'];
+      for (const usage of forbiddenKeyUsage) {
+        if (finalKeyUsage.includes(usage)) {
+          this.error = `End-entity certificates cannot have ${usage} key usage`;
+          return false;
+        }
+      }
+    }
+
+    return true;
+  }
+
+  private getTemplateKeyUsage(): string[] {
+    if (!this.selectedTemplate || !this.selectedTemplate.keyUsage) {
+      return [];
+    }
+    return this.selectedTemplate.keyUsage.split(',').map(s => s.trim());
+  }
+
+  private getTemplateExtendedKeyUsage(): string[] {
+    if (!this.selectedTemplate || !this.selectedTemplate.extendedKeyUsage) {
+      return [];
+    }
+    return this.selectedTemplate.extendedKeyUsage.split(',').map(s => s.trim());
   }
 
   loadSigningCertificates(): void {
@@ -614,6 +831,11 @@ export class IssueCertificateComponent implements OnInit {
     if (!this.request.commonName || !this.request.organization || 
         !this.request.organizationalUnit || !this.request.email || !this.request.country) {
       this.error = 'Please fill in all required fields';
+      return;
+    }
+
+    // Validate extensions against policy
+    if (!this.validateExtensionsAgainstPolicy()) {
       return;
     }
 

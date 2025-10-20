@@ -6,10 +6,16 @@ import com.ftn.siit.ib.public_key_infrastructure.dtos.UpdateTemplateDTO;
 import com.ftn.siit.ib.public_key_infrastructure.entities.CertificateTemplate;
 import com.ftn.siit.ib.public_key_infrastructure.entities.User;
 import com.ftn.siit.ib.public_key_infrastructure.repositories.CertificateTemplateRepository;
+import com.ftn.siit.ib.public_key_infrastructure.repositories.CertificateRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.security.access.AccessDeniedException;
+import java.util.List;
+import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
+import java.util.stream.Collectors;
 
 /**
  * TemplateService manages certificate templates for CA users.
@@ -30,169 +36,202 @@ import org.springframework.transaction.annotation.Transactional;
 public class TemplateService {
 
     private final CertificateTemplateRepository templateRepository;
-    private final ValidationService validationService;
+    private final CertificateRepository certificateRepository;
 
     public TemplateService(
             CertificateTemplateRepository templateRepository,
-            ValidationService validationService) {
+            CertificateRepository certificateRepository) {
         this.templateRepository = templateRepository;
-        this.validationService = validationService;
+        this.certificateRepository = certificateRepository;
     }
 
     /**
      * Creates a new certificate template.
-     * 
-     * Process:
-     * 1. Validate caUser has CA_USER or ADMIN role
-     * 2. Validate issuerCertificate exists and is owned by caUser (or any for ADMIN)
-     * 3. Validate issuerCertificate is a valid CA certificate
-     * 4. Validate regex patterns (compile to check syntax)
-     * 5. Validate TTL is reasonable (1-365 days for end-entity)
-     * 6. Save template with caIssuer = caUser
-     * 
-     * Authorization:
-     * - CA_USER can create templates for their own CA certificates
-     * - ADMIN can create templates for any CA certificate
-     * - EE_USER cannot create templates
-     * 
-     * @param dto Template creation parameters
-     * @param caUser The CA user creating the template
-     * @return TemplateDTO containing the created template
-     * @throws IllegalArgumentException if dto or caUser is null
-     * @throws UnauthorizedException if caUser is not CA_USER or ADMIN
-     * @throws ValidationException if any validation fails
-     * @throws NotFoundException if issuer certificate not found
-     * @throws ForbiddenException if CA_USER tries to use another user's CA
      */
     public TemplateDTO createTemplate(CreateTemplateDTO dto, User caUser) {
-        throw new UnsupportedOperationException("Not implemented yet");
+        // Validate user has permission (support enum Role or string)
+        Object roleObj = caUser.getRole();
+        String roleName = roleObj == null ? null : roleObj.toString();
+        if (roleName == null || !("CA_USER".equals(roleName) || "ADMIN".equals(roleName))) {
+            throw new AccessDeniedException("Only CA_USER and ADMIN can create templates");
+        }
+        
+        // Validate CA issuer certificate exists
+        if (!certificateRepository.existsBySerialNumber(dto.getCaIssuerSerialNumber())) {
+            throw new IllegalArgumentException("CA issuer certificate not found: " + dto.getCaIssuerSerialNumber());
+        }
+        
+        // Validate regex patterns
+        validateRegexPattern(dto.getCnRegex(), "CN regex");
+        validateRegexPattern(dto.getSanRegex(), "SAN regex");
+        
+        // Create template entity
+        CertificateTemplate template = new CertificateTemplate();
+        template.setName(dto.getName());
+        template.setCaIssuerSerialNumber(dto.getCaIssuerSerialNumber());
+        template.setCnRegex(dto.getCnRegex());
+        template.setSanRegex(dto.getSanRegex());
+        template.setTtl(dto.getTtl());
+        template.setKeyUsage(dto.getKeyUsage());
+        template.setExtendedKeyUsage(dto.getExtendedKeyUsage());
+        template.setCreatedBy(caUser);
+        
+        // Save template
+        CertificateTemplate savedTemplate = templateRepository.save(template);
+        
+        return convertToDTO(savedTemplate);
     }
 
     /**
      * Updates an existing certificate template.
-     * 
-     * Process:
-     * 1. Validate template exists and is owned by caUser (or ADMIN)
-     * 2. Update modifiable fields (name, patterns, TTL, key usages)
-     * 3. Validate regex patterns if changed
-     * 4. Set updatedAt timestamp
-     * 
-     * Note: issuerCertificate and caIssuer cannot be changed after creation
-     * to maintain referential integrity.
-     * 
-     * Authorization:
-     * - Template owner can update their templates
-     * - ADMIN can update any template
-     * 
-     * @param templateId The ID of the template to update
-     * @param dto Update parameters
-     * @param caUser The user updating the template
-     * @return TemplateDTO containing the updated template
-     * @throws IllegalArgumentException if dto or caUser is null
-     * @throws NotFoundException if template not found
-     * @throws ForbiddenException if caUser is not the owner and not ADMIN
-     * @throws ValidationException if any validation fails
      */
     public TemplateDTO updateTemplate(Long templateId, UpdateTemplateDTO dto, User caUser) {
-        throw new UnsupportedOperationException("Not implemented yet");
+        CertificateTemplate template = templateRepository.findById(templateId)
+            .orElseThrow(() -> new IllegalArgumentException("Template not found: " + templateId));
+        
+        // Check permissions
+        if (!hasModifyPermission(template, caUser)) {
+            throw new AccessDeniedException("You don't have permission to modify this template");
+        }
+        
+        // Validate regex patterns
+        validateRegexPattern(dto.getCnRegex(), "CN regex");
+        validateRegexPattern(dto.getSanRegex(), "SAN regex");
+        
+        // Update fields
+        template.setName(dto.getName());
+        template.setCnRegex(dto.getCnRegex());
+        template.setSanRegex(dto.getSanRegex());
+        template.setTtl(dto.getTtl());
+        template.setKeyUsage(dto.getKeyUsage());
+        template.setExtendedKeyUsage(dto.getExtendedKeyUsage());
+        
+        // Save updated template
+        CertificateTemplate savedTemplate = templateRepository.save(template);
+        
+        return convertToDTO(savedTemplate);
     }
 
     /**
      * Deletes a certificate template.
-     * 
-     * Process:
-     * 1. Validate template exists
-     * 2. Check ownership (owner or ADMIN)
-     * 3. Check that no pending CSRs reference this template
-     * 4. Delete template
-     * 
-     * Templates with pending CSRs cannot be deleted to maintain
-     * referential integrity and allow CSR processing to complete.
-     * 
-     * Authorization:
-     * - Template owner can delete their templates
-     * - ADMIN can delete any template
-     * 
-     * @param templateId The ID of the template to delete
-     * @param requester The user requesting deletion
-     * @throws IllegalArgumentException if requester is null
-     * @throws NotFoundException if template not found
-     * @throws ForbiddenException if requester is not the owner and not ADMIN
-     * @throws IllegalStateException if template has pending CSRs
      */
     public void deleteTemplate(Long templateId, User requester) {
-        throw new UnsupportedOperationException("Not implemented yet");
+        CertificateTemplate template = templateRepository.findById(templateId)
+            .orElseThrow(() -> new IllegalArgumentException("Template not found: " + templateId));
+        
+        // Check permissions
+        if (!hasModifyPermission(template, requester)) {
+            throw new AccessDeniedException("You don't have permission to delete this template");
+        }
+        
+        // Delete template
+        templateRepository.delete(template);
     }
 
     /**
-     * Lists templates owned by a CA user.
-     * 
-     * For CA_USER: Returns only their own templates
-     * For ADMIN: Returns all templates (optionally filtered by caIssuer)
-     * 
-     * @param caUser The CA user whose templates to list
-     * @param pageable Pagination parameters
-     * @return Page of TemplateDTO objects
-     * @throws IllegalArgumentException if caUser is null
+     * Lists all templates.
      */
-    public Page<TemplateDTO> listTemplates(User caUser, Pageable pageable) {
-        throw new UnsupportedOperationException("Not implemented yet");
+    public List<TemplateDTO> getAllTemplates() {
+        List<CertificateTemplate> templates = templateRepository.findAll();
+        return templates.stream()
+            .map(this::convertToDTO)
+            .collect(Collectors.toList());
     }
-
+    
     /**
-     * Gets a specific template by ID with access control.
-     * 
-     * Access rules:
-     * - Template owner can view their templates
-     * - ADMIN can view any template
-     * - Other users can view templates for discovery purposes
-     *   (to know what templates are available when creating CSRs)
-     * 
-     * @param templateId The ID of the template
-     * @param requester The user requesting the template
-     * @return TemplateDTO containing template details
-     * @throws IllegalArgumentException if requester is null
-     * @throws NotFoundException if template not found
+     * Lists templates for a specific CA issuer.
      */
-    public TemplateDTO getTemplateById(Long templateId, User requester) {
-        throw new UnsupportedOperationException("Not implemented yet");
+    public List<TemplateDTO> getTemplatesForCA(String caSerialNumber) {
+        List<CertificateTemplate> templates = templateRepository.findByCaIssuerSerialNumber(caSerialNumber);
+        return templates.stream()
+            .map(this::convertToDTO)
+            .collect(Collectors.toList());
     }
-
+    
     /**
-     * Lists all templates available for a specific CA certificate.
-     * 
-     * This is used when creating CSRs to show available templates
-     * for the selected CA.
-     * 
-     * @param caCertificateId The ID of the CA certificate
-     * @param pageable Pagination parameters
-     * @return Page of TemplateDTO objects
-     * @throws IllegalArgumentException if caCertificateId is null
-     * @throws NotFoundException if CA certificate not found
+     * Gets a specific template by ID.
      */
-    public Page<TemplateDTO> listTemplatesForCA(Long caCertificateId, Pageable pageable) {
-        throw new UnsupportedOperationException("Not implemented yet");
+    public TemplateDTO getTemplateById(Long templateId) {
+        CertificateTemplate template = templateRepository.findById(templateId)
+            .orElseThrow(() -> new IllegalArgumentException("Template not found: " + templateId));
+        return convertToDTO(template);
+    }
+    
+    /**
+     * Validates CN against template regex.
+     */
+    public boolean validateCN(String cn, String regex) {
+        try {
+            Pattern pattern = Pattern.compile(regex);
+            return pattern.matcher(cn).matches();
+        } catch (PatternSyntaxException e) {
+            return false;
+        }
+    }
+    
+    /**
+     * Validates SAN against template regex.
+     */
+    public boolean validateSAN(String san, String regex) {
+        try {
+            Pattern pattern = Pattern.compile(regex);
+            return pattern.matcher(san).matches();
+        } catch (PatternSyntaxException e) {
+            return false;
+        }
     }
 
     /**
      * Converts a CertificateTemplate entity to a TemplateDTO for API responses.
-     * 
-     * @param template The template entity
-     * @return TemplateDTO containing template information
      */
     private TemplateDTO convertToDTO(CertificateTemplate template) {
-        throw new UnsupportedOperationException("Not implemented yet");
+        TemplateDTO dto = new TemplateDTO();
+        dto.setId(template.getId());
+        dto.setName(template.getName());
+        dto.setCaIssuerSerialNumber(template.getCaIssuerSerialNumber());
+        dto.setCnRegex(template.getCnRegex());
+        dto.setSanRegex(template.getSanRegex());
+        dto.setTtl(template.getTtl());
+        dto.setKeyUsage(template.getKeyUsage());
+        dto.setExtendedKeyUsage(template.getExtendedKeyUsage());
+        dto.setCreatedAt(template.getCreatedAt());
+        dto.setUpdatedAt(template.getUpdatedAt());
+        
+        // Set created by user info
+        if (template.getCreatedBy() != null) {
+            TemplateDTO.UserDTO userDTO = new TemplateDTO.UserDTO();
+            userDTO.setId(template.getCreatedBy().getId());
+            userDTO.setEmail(template.getCreatedBy().getEmail());
+            userDTO.setFirstName(template.getCreatedBy().getFirstName());
+            userDTO.setLastName(template.getCreatedBy().getLastName());
+            dto.setCreatedBy(userDTO);
+        }
+        
+        return dto;
     }
 
     /**
      * Checks if a user has permission to modify a template.
-     * 
-     * @param template The template to check
-     * @param requester The user attempting to modify
-     * @return true if the user has permission, false otherwise
      */
     private boolean hasModifyPermission(CertificateTemplate template, User requester) {
-        throw new UnsupportedOperationException("Not implemented yet");
+        // ADMIN can modify any template
+        if (requester.getRole().equals("ADMIN")) {
+            return true;
+        }
+        
+        // Template owner can modify their templates
+        return template.getCreatedBy().getId().equals(requester.getId());
+    }
+    
+    /**
+     * Validates regex pattern syntax.
+     */
+    private void validateRegexPattern(String regex, String fieldName) {
+        try {
+            Pattern.compile(regex);
+        } catch (PatternSyntaxException e) {
+            throw new IllegalArgumentException("Invalid " + fieldName + " pattern: " + e.getMessage());
+        }
     }
 }
 

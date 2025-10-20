@@ -18,35 +18,34 @@ public class CertificateTemplate {
     private Long id;
     
     @Column(nullable = false)
-    private String name;  // Template name (e.g., "Web Server Template")
+    private String name;  // Template name (e.g., "Employee Certificate Template")
     
-    @ManyToOne
-    @JoinColumn(name = "ca_issuer_id", nullable = false)
-    private User caIssuer;  // CA_USER who created this template
-    
-    @ManyToOne
-    @JoinColumn(name = "issuer_certificate_id", nullable = false)
-    private Certificate issuerCertificate;  // CA certificate to use for signing
+    @Column(nullable = false)
+    private String caIssuerSerialNumber;  // CA certificate serial number that will issue certificates
     
     // ===== Validation Patterns (Regex) =====
-    @Column(length = 500)
-    private String commonNamePattern;  // Regex for CN validation (e.g., ".*\\.example\\.com")
+    @Column(nullable = false, length = 500)
+    private String cnRegex;  // Regex for CN validation (e.g., ".*\\.ftn\\.com")
     
-    @Column(length = 500)
-    private String sanPattern;  // Regex for SAN validation
+    @Column(nullable = false, length = 500)
+    private String sanRegex;  // Regex for SAN validation (e.g., ".*\\.ftn\\.com")
     
     // ===== Certificate Constraints =====
     @Column(nullable = false)
-    private Integer ttlDays;  // Maximum validity period in days
+    private Integer ttl;  // TTL (time to live) in days - maximum validity period
     
     // ===== Default Extensions =====
-    @Column(length = 500)
+    @Column(nullable = false, length = 500)
     private String keyUsage;  // Default Key Usage extensions
     
-    @Column(length = 500)
+    @Column(nullable = false, length = 500)
     private String extendedKeyUsage;  // Default Extended Key Usage
     
     // ===== Metadata =====
+    @ManyToOne
+    @JoinColumn(name = "created_by_id", nullable = false)
+    private User createdBy;  // CA_USER who created this template
+    
     @Column(nullable = false)
     private LocalDateTime createdAt;
     
